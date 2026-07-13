@@ -1,0 +1,111 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --color-background: #ffffff;
+  --color-foreground: #071633;
+
+  --color-surface: #ffffff;
+  --color-surface-soft: #f7f9fe;
+  --color-border: #e2e8f3;
+
+  --color-navy-50: #f4f7fc;
+  --color-navy-100: #e7edf8;
+  --color-navy-300: #98a6bd;
+  --color-navy-400: #6f7f9d;
+  --color-navy-500: #33415f;
+  --color-navy-700: #10244d;
+  --color-navy-900: #071633;
+
+  --color-telefya-blue: #0f6bff;
+  --color-telefya-violet: #6426ff;
+  --color-telefya-purple: #8b22ff;
+  --color-telefya-green: #22d386;
+  --color-telefya-coral: #ff4b3e;
+  --color-telefya-gold: #ffb21c;
+
+  --shadow-soft: 0 8px 26px rgba(7, 22, 51, 0.07);
+  --shadow-enterprise: 0 22px 70px rgba(7, 22, 51, 0.15);
+}
+
+:root {
+  --telefya-blue: #0f6bff;
+  --telefya-violet: #6426ff;
+  --telefya-purple: #8b22ff;
+  --telefya-green: #22d386;
+  --telefya-coral: #ff4b3e;
+  --telefya-gold: #ffb21c;
+  --telefya-navy: #071633;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 84% 6%, rgba(139, 34, 255, 0.1), transparent 28%),
+    radial-gradient(circle at 9% 14%, rgba(15, 107, 255, 0.08), transparent 26%),
+    radial-gradient(circle at 92% 72%, rgba(34, 211, 134, 0.07), transparent 24%),
+    linear-gradient(180deg, #ffffff 0%, #f8faff 48%, #f3f7ff 100%);
+  color: var(--telefya-navy);
+  font-family: "Inter", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.telefya-gradient {
+  background: linear-gradient(135deg, #0f6bff 0%, #6426ff 48%, #8b22ff 100%);
+}
+
+.telefya-text-gradient {
+  background: linear-gradient(90deg, #0f6bff 0%, #ff4b3e 31%, #ffb21c 53%, #22d386 72%, #8b22ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.enterprise-card {
+  border: 1px solid #e2e8f3;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 8px 26px rgba(7, 22, 51, 0.07);
+  backdrop-filter: blur(14px);
+}
+
+.telefya-surface {
+  border: 1px solid #e2e8f3;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(15, 107, 255, 0.05), transparent 30%),
+    #ffffff;
+  box-shadow: 0 8px 26px rgba(7, 22, 51, 0.07);
+}
+
+.telefya-aurora {
+  background:
+    radial-gradient(circle at 78% 10%, rgba(100, 38, 255, 0.16), transparent 28%),
+    radial-gradient(circle at 18% 80%, rgba(34, 211, 134, 0.12), transparent 24%),
+    radial-gradient(circle at 10% 10%, rgba(15, 107, 255, 0.12), transparent 26%),
+    #ffffff;
+}
+
+.telefya-accent-line {
+  background: linear-gradient(90deg, #0f6bff, #6426ff, #22d386, #ffb21c, #ff4b3e);
+}
+
+@keyframes fadeSlide {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
