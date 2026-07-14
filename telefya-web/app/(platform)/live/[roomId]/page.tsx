@@ -152,7 +152,9 @@ export default function LiveRoomPage() {
   const [participantsOpen, setParticipantsOpen] = useState(false);
   const [recordingAction, setRecordingAction] = useState(false);
   const [localRecordingNotice, setLocalRecordingNotice] = useState("");
-  const [billingNotice, setBillingNotice] = useState<BillingNotice | null>(null);
+  const [billingNotice, setBillingNotice] = useState<BillingNotice | null>(
+    null,
+  );
   const [user, setUser] = useState(getSavedUser());
 
   useEffect(() => {
@@ -196,8 +198,7 @@ export default function LiveRoomPage() {
             ? "Recording requires an upgrade"
             : "Plan limit reached",
         message:
-          payload?.message ||
-          "Your current plan does not allow this action.",
+          payload?.message || "Your current plan does not allow this action.",
         code,
         upgrade: true,
       });
@@ -628,9 +629,11 @@ export default function LiveRoomPage() {
 
             {screenTile && sideTiles.length ? (
               <aside className="hidden min-h-0 content-start gap-2 overflow-y-auto xl:grid">
-                {sideTiles.map((tile) => (
-                  <StageTileView key={tile.id} tile={tile} compact />
-                ))}
+                {sideTiles.map((tile) =>
+                  tile ? (
+                    <StageTileView key={tile.id} tile={tile} compact />
+                  ) : null,
+                )}
               </aside>
             ) : null}
 
@@ -815,7 +818,12 @@ export default function LiveRoomPage() {
               ) : null}
             </div>
 
-            <DockButton danger icon={PhoneOff} label="Leave" onClick={leaveRoom} />
+            <DockButton
+              danger
+              icon={PhoneOff}
+              label="Leave"
+              onClick={leaveRoom}
+            />
           </div>
         </div>
 
@@ -901,7 +909,9 @@ function EmbeddedChatPanel({
           <div className="grid gap-4">
             {messages.map((message, index) => (
               <div
-                key={message.messageId || `${message.socketId || "msg"}-${index}`}
+                key={
+                  message.messageId || `${message.socketId || "msg"}-${index}`
+                }
                 className="grid gap-1.5"
               >
                 <div className="flex items-center gap-2">
