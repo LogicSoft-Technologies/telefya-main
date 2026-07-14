@@ -1,0 +1,1 @@
+npx jest __tests__/mediasoupServer2

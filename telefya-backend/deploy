@@ -1,0 +1,402 @@
+#!/bin/bash
+
+# =============================================
+# 🔐 Secure Deployment Script (No PM2 Daemon)
+# =============================================
+
+# Configuration variables
+COMMIT_MESSAGE="$1"
+APP_NAME="bww-app-api"
+USER="administrator"
+REMOTE_IP="63.141.255.177"
+REMOTE_PATH="/home/bww-api"
+BWWUSER="bww-api"
+
+# 🔧 Fix this path! Use Linux format, e.g., ~/.ssh/id_rsa
+SSH_KEY_PATH="/d/ludo-data/ludo"  # Fixed: Changed to Git Bash compatible path
+PM2_SHARED_DIR="/var/lib/pm2"     # Shared location for PM2 data
+
+# Error handler
+error_exit() {
+    echo "❌ Error: $1" >&2
+    exit "${2:-1}"
+}
+
+# Validate inputs
+if [[ -z "$COMMIT_MESSAGE" ]]; then
+    echo "📌 Usage: $0 'Your commit message'"
+    error_exit "Commit message is required" 1
+fi
+
+if [[ -z "$REMOTE_IP" ]]; then
+    error_exit "REMOTE_IP must be set in configuration"
+fi
+
+if [[ ! -f "$SSH_KEY_PATH" ]]; then
+    error_exit "SSH private key not found at $SSH_KEY_PATH. Please check path and permissions."
+fi
+
+# Ensure SSH key has secure permissions
+if [[ -f "$SSH_KEY_PATH" ]]; then
+    PERMS=$(stat -c '%a' "$SSH_KEY_PATH" 2>/dev/null || stat -f '%A' "$SSH_KEY_PATH" 2>/dev/null)
+    if [[ "$PERMS" != "600" ]]; then
+        echo "🔐 Securing SSH key permissions..."
+        chmod 600 "$SSH_KEY_PATH" || error_exit "Failed to fix SSH key permissions"
+    fi
+fi
+
+# Main deployment function
+setup() {
+    echo "🚀 Starting secure deployment process..."
+
+    # Start SSH agent if needed
+    if ! pgrep -x ssh-agent > /dev/null; then
+        echo "🔑 Starting SSH agent..."
+        eval "$(ssh-agent -s)" > /dev/null || error_exit "Failed to start SSH agent"
+        ssh-add "$SSH_KEY_PATH" || error_exit "Failed to add SSH key to agent"
+    fi
+
+    # Clean up old archives
+    rm -f ./*.tar.gz 2>/dev/null || true
+
+    # Create temporary exclude list
+    local EXCLUDE_FILE="/tmp/exclude_list_$$.txt"
+    cat > "$EXCLUDE_FILE" << 'EOF'
+node_modules
+.cert
+.git
+coverage
+*.tar.gz
+deploy
+logs
+*.log
+.npm
+.cache
+tmp
+temp
+.DS_Store
+Thumbs.db
+package-lock.json
+.env
+*.key
+*.pem
+*.p12
+secrets
+config/production.json
+EOF
+
+    # Build archive
+    echo "📦 Creating application archive..."
+    if tar --exclude-from="$EXCLUDE_FILE" \
+           --ignore-failed-read \
+           -czf "${APP_NAME}.tar.gz" . 2>/dev/null; then
+        echo "✅ Archive created: ${APP_NAME}.tar.gz"
+    else
+        echo "⚠️ Primary tar failed. Trying fallback method..."
+        if tar -czf "${APP_NAME}.tar.gz" \
+               --exclude='node_modules' \
+               --exclude='.git' \
+               --exclude='*.tar.gz' \
+               --exclude='.env' \
+               --exclude='logs' \
+               --exclude='*.log' \
+               . 2>/dev/null; then
+            echo "✅ Archive created with basic exclusions"
+        else
+            echo "❌ Both tar methods failed."
+            ls -la | head -10
+            rm -f "$EXCLUDE_FILE"
+            error_exit "Archive creation failed – check file permissions and disk space"
+        fi
+    fi
+
+    # Cleanup
+    rm -f "$EXCLUDE_FILE"
+
+    # Verify archive
+    if [[ ! -f "${APP_NAME}.tar.gz" ]]; then
+        error_exit "Archive was not created successfully"
+    fi
+
+    # Test SSH connection
+    echo "📡 Testing SSH connectivity..."
+    ssh -i "$SSH_KEY_PATH" -o ConnectTimeout=10 -o BatchMode=yes -o StrictHostKeyChecking=no \
+         "${USER}@${REMOTE_IP}" "echo 'SSH connection OK'" || error_exit "SSH connection failed"
+
+    # Upload archive
+    echo "📤 Uploading archive via SCP..."
+    scp -i "$SSH_KEY_PATH" -o StrictHostKeyChecking=no \
+        "${APP_NAME}.tar.gz" "${USER}@${REMOTE_IP}:/tmp/" || error_exit "Upload failed"
+
+    # Execute remote deployment
+    echo "🔧 Running remote deployment commands..."
+    
+    ssh -i "$SSH_KEY_PATH" -o StrictHostKeyChecking=no \
+        "${USER}@${REMOTE_IP}" bash << 'EOFREMOTE'
+        set -euo pipefail
+
+        # Import variables from local environment
+        APP_NAME="${APP_NAME:-bww-app-api}"
+        REMOTE_PATH="${REMOTE_PATH:-/home/bww-api}"
+        BWWUSER="${BWWUSER:-bww-api}"
+        USER="${USER:-administrator}"
+
+
+        # Restrictive umask
+        umask 027
+
+        # Error handler for remote
+        error_exit() {
+            echo "❌ Remote Error: $1" >&2
+            exit "${2:-1}"
+        }
+
+        # Setup user and group
+       
+        # Install Node.js and PM2 (globally)
+        setup_nodejs_npm_pm2() {
+            echo "⚙️ Installing Node.js and PM2..."
+
+            if ! command -v node &>/dev/null; then
+                curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - || error_exit "NodeSource setup failed"
+                sudo apt-get update && sudo apt-get install -y nodejs || error_exit "Node.js install failed"
+            fi
+
+            if ! command -v pm2 &>/dev/null; then
+                sudo npm install -g pm2@latest || error_exit "PM2 install failed"
+            fi
+        }
+
+        # Install and configure Nginx
+        install_nginx() {
+            if ! command -v nginx &>/dev/null; then
+                echo "📥 Installing Nginx..."
+                sudo apt update && sudo apt install -y nginx || error_exit "Nginx install failed"
+            fi
+
+            # Clean up conflicting configs
+            sudo find /etc/nginx/sites-available /etc/nginx/sites-enabled -type f 2>/dev/null | while read -r file; do
+                if grep -q "server_name meet.bornwithwealth.com" "$file" 2>/dev/null; then
+                    if [[ "$file" != "/etc/nginx/sites-available/bww-app" ]]; then
+                        sudo rm -f "$file"
+                    fi
+                fi
+            done
+            sudo rm -f /etc/nginx/sites-enabled/default /etc/nginx/sites-enabled/bww-api 2>/dev/null || true
+
+            # Ensure include directive exists
+            if ! grep -q '/etc/nginx/sites-enabled/\*' /etc/nginx/nginx.conf; then
+                sudo sed -i '/http[[:space:]]*{/,/}/ { /^[[:space:]]*}[[:space:]]*$/i\    include /etc/nginx/sites-enabled/*;
+}' /etc/nginx/nginx.conf
+            fi
+
+            # Write Nginx config
+            sudo tee /etc/nginx/sites-available/bww-app > /dev/null << 'NGINX_EOF'
+limit_req_zone $binary_remote_addr zone=api:10m rate=10r/s;
+
+upstream bww_backend {
+    server 127.0.0.1:5000 max_fails=3 fail_timeout=30s;
+}
+
+server {
+    listen 80;
+    server_name meet.bornwithwealth.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name meet.bornwithwealth.com;
+
+    ssl_certificate /etc/letsencrypt/live/bornwithwealth.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/bornwithwealth.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+
+    add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "no-referrer-when-downgrade" always;
+   # add_header Content-Security-Policy "default-src 'self' https:; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:; connect-src 'self' wss: https:;" always;
+
+    root /home/bww-web;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg)$ {
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+        }
+    }
+
+    location /socket.io/ {
+        proxy_pass http://bww_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 300s;
+    }
+
+    location ~ ^/(class_meeting|conf_meeting) {
+        limit_req zone=api burst=5 nodelay;
+        proxy_pass http://bww_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+         proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /images2/ {
+        client_max_body_size 10M;
+        proxy_pass http://bww_backend/images2/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /api/v2 {
+        limit_req zone=api burst=20 nodelay;
+        proxy_pass http://bww_backend/api/v2;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_pass_header Set-Cookie;
+        proxy_cache_bypass $http_upgrade;
+        client_max_body_size 5M;
+    }
+
+    location ~ /\. {
+        deny all;
+    }
+    
+    location ~ ^/(\.env|config/|\.git) {
+        deny all;
+    }
+}
+NGINX_EOF
+
+            sudo ln -sf /etc/nginx/sites-available/bww-app /etc/nginx/sites-enabled/bww-app
+            sudo nginx -t && sudo systemctl reload nginx && sudo systemctl enable nginx
+        }
+
+        # Prepare app directory
+        prepare_application() {
+            echo " Preparing application directory..."
+            sudo mkdir -p "${REMOTE_PATH}"
+            sudo chown -R "${USER}:${USER}" "${REMOTE_PATH}"
+            cd "${REMOTE_PATH}" || error_exit "Failed to enter ${REMOTE_PATH}"
+
+            sudo mv "/tmp/${APP_NAME}.tar.gz" ./
+            sudo chown "${USER}:${USER}" "${APP_NAME}.tar.gz"
+
+            # Clear old files
+            sudo -u "${USER}" find . -maxdepth 1 -not -name "${APP_NAME}.tar.gz" -not -name '.' -not -name '..' -exec rm -rf {} + 2>/dev/null || true
+
+            # Extract
+            sudo -u "${USER}" tar -xzf "${APP_NAME}.tar.gz"
+            sudo -u "${USER}" rm -f "${APP_NAME}.tar.gz"
+            sudo -u "${USER}" bash -c "test -f .env-production && mv .env-production .env" 2>/dev/null || true
+
+            # Install dependencies
+            sudo -u "${USER}" npm install --production || error_exit "npm install failed"
+
+            # Secure permissions
+            sudo chown -R "${USER}:${USER}" "${REMOTE_PATH}"
+            sudo find "${REMOTE_PATH}" -type d -exec chmod 755 {} \;
+            sudo find "${REMOTE_PATH}" -type f -exec chmod 644 {} \;
+            #sudo find "${REMOTE_PATH}" -name "*.js" -exec chmod 755 {} \;
+            sudo find "${REMOTE_PATH}" -name ".env*" -exec chmod 600 {} \; 2>/dev/null || true
+            sudo chmod +x "${REMOTE_PATH}/node_modules/mediasoup/worker/out/Release/mediasoup-worker" 2>/dev/null || true
+        }
+
+        # Initialize PM2 directories
+       
+
+        # Stop any existing service on port 5000
+        stop_and_clear_port() {
+            echo "🧹 Stopping services on port 5000..."
+            for i in {1..3}; do
+                sudo lsof -ti:5000 2>/dev/null | xargs -r sudo kill -9 2>/dev/null || true
+                sudo -u "${USER}" bash -c "lsof -ti:5000 2>/dev/null | xargs -r kill -9 2>/dev/null || true"
+                sudo  bash -c "lsof -ti:5000 2>/dev/null | xargs -r kill -9 2>/dev/null || true"
+                sleep 1
+            done
+        }
+
+        # Start services WITHOUT DAEMONIZING
+        start_services() {
+            sudo nginx -t && sudo systemctl restart nginx
+            sleep 2
+
+         stop_and_clear_port
+         # node index.js & configure as service 
+         # check /etc/systemd/system/bww-app.service
+         sudo systemctl daemon-reload
+         sudo systemctl enable bww-app
+         sudo systemctl restart bww-app || error_exit "Failed to start bww-app service"
+         # pm2 stop ${APP_NAME}-runner 2>/dev/null || true
+         # pm2 delete ${APP_NAME}-runner 2>/dev/null || true
+        #  pm2 start index.js --name ${APP_NAME}-runner -i 1 --watch --ignore-watch="node_modules" --time
+         # pm2 save
+        }
+
+        # Run steps
+        setup_nodejs_npm_pm2
+        install_nginx
+        prepare_application
+        start_services
+EOFREMOTE
+
+    # Local cleanup
+    echo "🧹 Cleaning up local archive..."
+    rm -f "${APP_NAME}.tar.gz"
+    echo "✅ Deployment finished successfully!"
+}
+
+# Push to GitHub
+send_to_github() {
+    echo "📤 Pushing changes to GitHub..."
+    if git diff-index --quiet HEAD --; then
+        echo "🟢 No changes to commit."
+        return 0
+    fi
+
+    git add . && \
+    git commit -m "$COMMIT_MESSAGE" && \
+    git push || error_exit "Git operation failed"
+    
+    echo "✅ Pushed to GitHub"
+}
+
+# Main entry point
+main() {
+    echo "🚀 Deploying to meet.bornwithwealth.com"
+    echo "📝 Commit: $COMMIT_MESSAGE"
+    echo "🌐 Server: $REMOTE_IP"
+    echo ""
+
+    setup
+    send_to_github
+
+    echo ""
+    echo "🎉 SUCCESS! App is now running in the foreground."
+    echo "💡 Press Ctrl+C to stop the app."
+    echo "🔗 Visit: https://meet.bornwithwealth.com"
+}
+
+main "$@"

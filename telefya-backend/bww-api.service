@@ -1,0 +1,18 @@
+# /etc/systemd/system/mediasoup-app.service
+[Unit]
+Description=Mediasoup Node.js App
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/node /home/bww-api/index.js
+WorkingDirectory=/home/bww-api
+Restart=on-failure
+RestartSec=10
+User=administrator
+Environment=NODE_ENV=production
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=mediasoup-app
+
+[Install]
+WantedBy=multi-user.target
