@@ -374,8 +374,9 @@ export default function RecorderPage() {
   const logoRef = useRef<HTMLImageElement | null>(null);
 
   const audioContextRef = useRef<AudioContext | null>(null);
-  const audioDestinationRef =
-    useRef<MediaStreamAudioDestinationNode | null>(null);
+  const audioDestinationRef = useRef<MediaStreamAudioDestinationNode | null>(
+    null,
+  );
   const audioSourcesRef = useRef<Map<string, MediaStreamAudioSourceNode>>(
     new Map(),
   );
@@ -522,11 +523,11 @@ export default function RecorderPage() {
         };
       });
 
-      const knownAudioOnly = audioStreams
+      const knownAudioOnly: VideoEntry[] = audioStreams
         .filter((audio) => {
           return !videoEntries.some((video) => video.userId === audio.userId);
         })
-        .map((audio) => {
+        .map((audio): VideoEntry => {
           const participant = audio.userId
             ? participantById.get(String(audio.userId))
             : undefined;
@@ -544,7 +545,8 @@ export default function RecorderPage() {
                 ? participant.micOn
                 : true,
             cameraOn: false,
-          } satisfies VideoEntry;
+            video: undefined,
+          };
         });
 
       const entries = [...videoEntries, ...knownAudioOnly];
