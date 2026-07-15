@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { getSavedUser } from "@/lib/auth/session";
 import { getAccessToken } from "@/lib/auth/tokens";
-import type { AuthUser } from "@/types/auth";
+import type { AuthUser } from "@/lib/api/auth";
 
 export function useAuthState() {
   const [ready, setReady] = useState(false);
