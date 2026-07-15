@@ -50,15 +50,15 @@ const resources = [
 
 export function ResourcesSection() {
   return (
-    <section id="resources" className="bg-navy-50 py-20">
+    <section id="resources" className="overflow-hidden bg-navy-50 py-14 sm:py-20">
       <div className="mx-auto max-w-[92rem] px-5 lg:px-8">
-        <div className="mb-10 flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
+        <div className="mb-8 flex flex-col justify-between gap-5 sm:mb-10 lg:flex-row lg:items-end">
           <div>
-            <span className="rounded-full bg-white px-4 py-2 text-sm font-bold text-telefya-violet">
+            <span className="inline-flex rounded-full bg-white px-4 py-2 text-sm font-bold text-telefya-violet shadow-soft">
               Resources
             </span>
 
-            <h2 className="mt-5 max-w-2xl text-4xl font-black text-navy-900">
+            <h2 className="mt-5 max-w-2xl text-[clamp(2rem,8vw,2.5rem)] font-black leading-tight text-navy-900">
               Everything your team needs to build, launch, and support Telefya.
             </h2>
           </div>
@@ -69,14 +69,14 @@ export function ResourcesSection() {
           </p>
         </div>
 
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="telefya-horizontal-scroll flex snap-x snap-mandatory gap-4 overflow-x-auto pb-4 md:grid md:grid-cols-2 md:gap-5 md:overflow-visible md:pb-0 xl:grid-cols-3">
           {resources.map((item) => (
             <Link
               key={item.title}
               href={item.href}
-              className="group rounded-2xl border border-border bg-white p-6 shadow-soft transition hover:-translate-y-1 hover:border-telefya-blue"
+              className="group min-w-[84vw] snap-start rounded-2xl border border-border bg-white p-5 shadow-soft transition-all duration-300 hover:-translate-y-1 hover:border-telefya-blue hover:shadow-enterprise sm:min-w-[360px] sm:p-6 md:min-w-0"
             >
-              <div className="grid h-12 w-12 place-items-center rounded-xl bg-blue-50 text-telefya-blue">
+              <div className="grid h-12 w-12 place-items-center rounded-xl bg-blue-50 text-telefya-blue transition-transform duration-300 group-hover:scale-110 group-hover:bg-telefya-blue group-hover:text-white">
                 <item.icon size={24} />
               </div>
 
@@ -87,11 +87,19 @@ export function ResourcesSection() {
               <p className="mt-3 leading-7 text-navy-500">{item.desc}</p>
 
               <span className="mt-5 inline-flex items-center gap-2 text-sm font-black text-telefya-blue">
-                View resource <ArrowRight size={16} />
+                View resource
+                <ArrowRight
+                  size={16}
+                  className="transition-transform duration-300 group-hover:translate-x-1"
+                />
               </span>
             </Link>
           ))}
         </div>
+
+        <p className="mt-2 text-xs font-semibold text-navy-400 md:hidden">
+          Swipe to explore resources
+        </p>
       </div>
     </section>
   );

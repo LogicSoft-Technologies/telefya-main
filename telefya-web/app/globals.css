@@ -109,3 +109,42 @@ body {
     transform: translateY(0);
   }
 }
+
+html,
+body {
+  overflow-x: hidden;
+}
+
+.telefya-horizontal-scroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.telefya-horizontal-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes telefyaMarquee {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.telefya-logo-marquee {
+  animation: telefyaMarquee 30s linear infinite;
+  will-change: transform;
+}
+
+.telefya-logo-marquee:hover {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .telefya-logo-marquee {
+    animation: none;
+  }
+}

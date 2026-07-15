@@ -14,7 +14,7 @@ export default function PlatformLayout({
 
   if (checking) {
     return (
-      <main className="grid min-h-screen place-items-center bg-navy-50">
+      <main className="grid min-h-dvh place-items-center bg-navy-50 px-4">
         <div className="flex items-center gap-3 rounded-xl border border-border bg-white px-5 py-4 font-bold text-navy-700 shadow-soft">
           <Loader2 size={18} className="animate-spin text-telefya-blue" />
           Loading workspace...
@@ -24,13 +24,13 @@ export default function PlatformLayout({
   }
 
   return (
-    <div className="h-screen overflow-hidden bg-navy-50">
+    <div className="min-h-dvh overflow-x-hidden bg-navy-50">
       <PlatformSidebar />
 
-      <div className="h-screen lg:pl-[278px]">
+      <div className="min-h-dvh lg:pl-[278px]">
         <PlatformTopbar user={user} />
 
-        <main className="h-[calc(100vh-68px)] overflow-y-auto px-5 py-6 lg:px-8">
+        <main className="h-[calc(100dvh-64px)] overflow-y-auto overscroll-contain px-4 py-5 pb-10 sm:h-[calc(100dvh-68px)] sm:px-5 sm:py-6 lg:px-8">
           {children}
         </main>
       </div>

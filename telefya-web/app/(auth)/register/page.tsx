@@ -17,7 +17,10 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { registerUser } from "@/lib/api/auth";
-import { CountrySelect, PhoneCountrySelect } from "@/components/auth/CountrySelect";
+import {
+  CountrySelect,
+  PhoneCountrySelect,
+} from "@/components/auth/CountrySelect";
 import { MeetingPreview } from "@/components/auth/MeetingPreview";
 
 const initialForm = {
@@ -38,7 +41,6 @@ export default function Register() {
 
   const [showPassword, setShowPassword] = useState(false);
   const [form, setForm] = useState(initialForm);
-
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -86,16 +88,22 @@ export default function Register() {
         city: form.city.trim(),
       });
 
-      router.push(`/verify-email?email=${encodeURIComponent(form.email.trim().toLowerCase())}`);
+      router.push(
+        `/verify-email?email=${encodeURIComponent(
+          form.email.trim().toLowerCase(),
+        )}`,
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to create account.");
+      setError(
+        err instanceof Error ? err.message : "Unable to create account.",
+      );
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <main className="min-h-screen bg-white lg:flex">
+    <main className="min-h-dvh bg-white lg:flex">
       <aside className="hidden shrink-0 flex-col justify-between overflow-hidden bg-navy-900 lg:sticky lg:top-0 lg:flex lg:h-screen lg:w-[460px] xl:w-[520px]">
         <div className="telefya-accent-line h-1" />
 
@@ -141,25 +149,34 @@ export default function Register() {
         </div>
       </aside>
 
-      <section className="telefya-aurora flex min-h-screen w-full flex-1 justify-center overflow-y-auto px-6 py-10 sm:px-10 lg:px-14">
+      <section className="telefya-aurora flex min-h-dvh w-full flex-1 justify-center overflow-y-auto px-4 py-6 sm:px-8 sm:py-10 lg:px-14">
         <div className="w-full max-w-2xl">
-          <div className="mb-8 lg:hidden">
-            <Image
-              src="/images/telefya-logo.png"
-              alt="Telefya"
-              width={146}
-              height={44}
-              priority
-              className="h-9 w-auto"
-            />
+          <div className="mb-6 flex items-center justify-between lg:hidden">
+            <Link href="/" className="inline-flex">
+              <Image
+                src="/images/telefya-logo.png"
+                alt="Telefya"
+                width={146}
+                height={44}
+                priority
+                className="h-8 w-auto sm:h-9"
+              />
+            </Link>
+
+            <Link
+              href="/login"
+              className="rounded-xl border border-border bg-white px-3 py-2 text-sm font-black text-navy-700 shadow-soft transition hover:border-telefya-blue hover:text-telefya-blue"
+            >
+              Sign in
+            </Link>
           </div>
 
-          <div className="rounded-xl border border-border bg-white/95 p-6 shadow-enterprise backdrop-blur">
-            <span className="inline-flex rounded-full bg-blue-50 px-4 py-2 text-xs font-black uppercase tracking-[0.14em] text-telefya-blue">
+          <div className="rounded-xl border border-border bg-white/95 p-5 shadow-enterprise backdrop-blur sm:p-6">
+            <span className="inline-flex rounded-full bg-blue-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-telefya-blue sm:px-4 sm:text-xs">
               Start for free
             </span>
 
-            <h2 className="mt-5 text-3xl font-black text-navy-900">
+            <h2 className="mt-5 text-[clamp(1.85rem,8vw,2rem)] font-black leading-tight text-navy-900 sm:text-3xl">
               Create your account
             </h2>
 
@@ -170,14 +187,14 @@ export default function Register() {
             {error ? (
               <div
                 role="alert"
-                className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700"
+                className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold leading-6 text-red-700 sm:mt-6"
               >
                 {error}
               </div>
             ) : null}
 
-            <form onSubmit={handleSubmit} className="mt-8 grid gap-5">
-              <div className="grid gap-5 sm:grid-cols-2">
+            <form onSubmit={handleSubmit} className="mt-6 grid gap-4 sm:mt-8 sm:gap-5">
+              <div className="grid gap-4 sm:grid-cols-2 sm:gap-5">
                 <Field
                   label="First name"
                   icon={<User size={18} />}
@@ -212,7 +229,7 @@ export default function Register() {
                   Phone number
                 </span>
 
-                <div className="grid gap-2 sm:grid-cols-[170px_1fr]">
+                <div className="grid gap-2 sm:grid-cols-[170px_minmax(0,1fr)]">
                   <PhoneCountrySelect
                     value={form.country_code}
                     onChange={(dial) => updateField("country_code", dial)}
@@ -224,9 +241,11 @@ export default function Register() {
                       required
                       autoComplete="tel-national"
                       value={form.phone_number}
-                      onChange={(event) => updateField("phone_number", event.target.value)}
+                      onChange={(event) =>
+                        updateField("phone_number", event.target.value)
+                      }
                       placeholder="801 234 5678"
-                      className="w-full bg-transparent text-sm font-semibold text-navy-900 outline-none placeholder:text-navy-300"
+                      className="min-w-0 w-full bg-transparent text-sm font-semibold text-navy-900 outline-none placeholder:text-navy-300"
                     />
                   </span>
                 </div>
@@ -240,7 +259,7 @@ export default function Register() {
                 />
               </label>
 
-              <div className="grid gap-5 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2 sm:gap-5">
                 <Field
                   label="State"
                   icon={<MapPin size={18} />}
@@ -260,7 +279,7 @@ export default function Register() {
                 />
               </div>
 
-              <div className="grid gap-5 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2 sm:gap-5">
                 <Field
                   label="Date of birth"
                   type="date"
@@ -275,25 +294,38 @@ export default function Register() {
                     Password
                   </span>
 
-                  <span className="flex h-12 items-center gap-3 rounded-xl border border-border bg-white px-4 shadow-soft transition-all duration-200 focus-within:border-telefya-blue focus-within:ring-2 focus-within:ring-telefya-blue/15">
-                    <LockKeyhole size={18} className="shrink-0 text-navy-300" />
+                  <span className="flex h-12 min-w-0 items-center gap-3 rounded-xl border border-border bg-white px-4 shadow-soft transition-all duration-200 focus-within:border-telefya-blue focus-within:ring-2 focus-within:ring-telefya-blue/15">
+                    <LockKeyhole
+                      size={18}
+                      className="shrink-0 text-navy-300"
+                    />
+
                     <input
                       type={showPassword ? "text" : "password"}
                       required
                       minLength={8}
                       autoComplete="new-password"
                       value={form.password}
-                      onChange={(event) => updateField("password", event.target.value)}
+                      onChange={(event) =>
+                        updateField("password", event.target.value)
+                      }
                       placeholder="Minimum 8 characters"
-                      className="w-full bg-transparent text-sm font-semibold text-navy-900 outline-none placeholder:text-navy-300"
+                      className="min-w-0 w-full bg-transparent text-sm font-semibold text-navy-900 outline-none placeholder:text-navy-300"
                     />
+
                     <button
                       type="button"
                       onClick={() => setShowPassword((value) => !value)}
-                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      aria-label={
+                        showPassword ? "Hide password" : "Show password"
+                      }
                       className="shrink-0 text-navy-400 transition-colors duration-200 hover:text-navy-900"
                     >
-                      {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      {showPassword ? (
+                        <EyeOff size={18} />
+                      ) : (
+                        <Eye size={18} />
+                      )}
                     </button>
                   </span>
                 </label>
@@ -302,14 +334,15 @@ export default function Register() {
               <button
                 type="submit"
                 disabled={loading}
-                className="mt-2 inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-telefya-blue px-5 font-black text-white shadow-soft transition-all duration-200 hover:bg-telefya-violet hover:shadow-enterprise disabled:cursor-not-allowed disabled:opacity-70"
+                aria-busy={loading}
+                className="mt-2 inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-telefya-blue px-5 font-black text-white shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:bg-telefya-violet hover:shadow-enterprise disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {loading ? <Loader2 size={18} className="animate-spin" /> : null}
                 {loading ? "Creating account..." : "Create account"}
               </button>
             </form>
 
-            <p className="mt-8 text-center text-sm font-semibold text-navy-500">
+            <p className="mt-7 text-center text-sm font-semibold text-navy-500 sm:mt-8">
               Already have an account?{" "}
               <Link
                 href="/login"
@@ -345,8 +378,10 @@ function Field({
   return (
     <label className="grid gap-2">
       <span className="text-sm font-black text-navy-900">{label}</span>
-      <span className="flex h-12 items-center gap-3 rounded-xl border border-border bg-white px-4 shadow-soft transition-all duration-200 focus-within:border-telefya-blue focus-within:ring-2 focus-within:ring-telefya-blue/15">
+
+      <span className="flex h-12 min-w-0 items-center gap-3 rounded-xl border border-border bg-white px-4 shadow-soft transition-all duration-200 focus-within:border-telefya-blue focus-within:ring-2 focus-within:ring-telefya-blue/15">
         <span className="shrink-0 text-navy-300">{icon}</span>
+
         <input
           type={type}
           required
@@ -354,7 +389,7 @@ function Field({
           value={value}
           onChange={(event) => onChange(event.target.value)}
           placeholder={placeholder}
-          className="w-full bg-transparent text-sm font-semibold text-navy-900 outline-none placeholder:text-navy-300"
+          className="min-w-0 w-full bg-transparent text-sm font-semibold text-navy-900 outline-none placeholder:text-navy-300"
         />
       </span>
     </label>

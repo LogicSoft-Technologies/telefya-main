@@ -139,6 +139,63 @@ function normalizeParticipants(value: unknown): ParticipantMeta[] {
   return [];
 }
 
+function MotionStyles() {
+  return (
+    <style jsx global>{`
+      @keyframes telefyaFadeScale {
+        from {
+          opacity: 0;
+          transform: scale(0.96) translateY(6px);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1) translateY(0);
+        }
+      }
+      @keyframes telefyaToastIn {
+        from {
+          opacity: 0;
+          transform: translateY(-14px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      @keyframes telefyaPop {
+        0% {
+          transform: scale(1);
+        }
+        45% {
+          transform: scale(1.22);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+      .telefya-tile-in {
+        animation: telefyaFadeScale 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+      .telefya-toast-in {
+        animation: telefyaToastIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+      .telefya-pop-in {
+        animation: telefyaPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .telefya-tile-in,
+        .telefya-toast-in,
+        .telefya-pop-in {
+          animation: none !important;
+        }
+        * {
+          transition-duration: 0.01ms !important;
+        }
+      }
+    `}</style>
+  );
+}
+
 export default function LiveRoomPage() {
   const params = useParams<{ roomId: string }>();
   const roomId = decodeURIComponent(params.roomId);
@@ -156,6 +213,8 @@ export default function LiveRoomPage() {
     null,
   );
   const [user, setUser] = useState(getSavedUser());
+  const [unreadCount, setUnreadCount] = useState(0);
+  const lastSeenCountRef = useRef(0);
 
   useEffect(() => {
     setUser(getSavedUser());
@@ -253,6 +312,18 @@ export default function LiveRoomPage() {
     const timer = window.setInterval(update, 1000);
     return () => window.clearInterval(timer);
   }, [room.recording, room.recordingStartedAt]);
+
+  useEffect(() => {
+    const total = room.messages.length;
+
+    if (chatOpen) {
+      lastSeenCountRef.current = total;
+      setUnreadCount(0);
+      return;
+    }
+
+    setUnreadCount(Math.max(0, total - lastSeenCountRef.current));
+  }, [room.messages.length, chatOpen]);
 
   const videoStreams = room.remoteStreams.filter(
     (stream) => stream.kind === "video",
@@ -431,10 +502,12 @@ export default function LiveRoomPage() {
   if (!started) {
     return (
       <main className="min-h-[calc(100vh-68px)]">
-        <section className="telefya-aurora overflow-hidden rounded-xl border border-border bg-white shadow-enterprise">
+        <MotionStyles />
+
+        <section className="telefya-aurora telefya-tile-in overflow-hidden rounded-xl border border-border bg-white shadow-enterprise">
           <div className="telefya-accent-line h-1" />
 
-          <div className="grid gap-8 p-6 lg:grid-cols-[1fr_420px] lg:items-center">
+          <div className="grid gap-6 p-4 sm:gap-8 sm:p-6 lg:grid-cols-[1fr_420px] lg:items-center">
             <div>
               <Image
                 src="/images/telefya-logo.png"
@@ -442,20 +515,20 @@ export default function LiveRoomPage() {
                 width={166}
                 height={50}
                 priority
-                className="h-11 w-auto"
+                className="h-9 w-auto sm:h-11"
               />
 
-              <div className="mt-8 inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-navy-500 shadow-soft">
+              <div className="mt-6 inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-navy-500 shadow-soft sm:mt-8">
                 <Radio size={15} className="text-telefya-violet" />
                 Live stage
               </div>
 
-              <h1 className="mt-6 max-w-3xl text-4xl font-black leading-tight text-navy-900">
+              <h1 className="mt-5 max-w-3xl text-3xl font-black leading-tight text-navy-900 sm:mt-6 sm:text-4xl">
                 Join a secure{" "}
                 <span className="telefya-text-gradient">Telefya meeting</span>
               </h1>
 
-              <p className="mt-4 max-w-2xl text-base leading-8 text-navy-500">
+              <p className="mt-4 max-w-2xl text-sm leading-7 text-navy-500 sm:text-base sm:leading-8">
                 Start as host to open the room, or join as a participant after
                 the host has started the session.
               </p>
@@ -475,14 +548,14 @@ export default function LiveRoomPage() {
                 Pre-join
               </p>
 
-              <h2 className="mt-2 text-2xl font-black text-navy-900">
+              <h2 className="mt-2 text-xl font-black text-navy-900 sm:text-2xl">
                 Choose how to enter
               </h2>
 
               <div className="mt-6 grid gap-3">
                 <button
                   onClick={startAsHost}
-                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-telefya-blue px-5 text-sm font-black text-white shadow-soft hover:bg-telefya-violet"
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-telefya-blue px-5 text-sm font-black text-white shadow-soft transition-transform duration-150 active:scale-[0.98] hover:bg-telefya-violet"
                 >
                   <Radio size={17} />
                   Start meeting as host
@@ -490,7 +563,7 @@ export default function LiveRoomPage() {
 
                 <button
                   onClick={joinAsParticipant}
-                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-border bg-white px-5 text-sm font-black text-navy-800 hover:border-telefya-blue hover:text-telefya-blue"
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-border bg-white px-5 text-sm font-black text-navy-800 transition-transform duration-150 active:scale-[0.98] hover:border-telefya-blue hover:text-telefya-blue"
                 >
                   <Video size={17} />
                   Join as participant
@@ -498,7 +571,7 @@ export default function LiveRoomPage() {
 
                 <button
                   onClick={copyRoomLink}
-                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-border bg-navy-50 px-5 text-sm font-black text-navy-700 hover:border-telefya-green hover:text-telefya-green"
+                  className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-border bg-navy-50 px-5 text-sm font-black text-navy-700 transition-transform duration-150 active:scale-[0.98] hover:border-telefya-green hover:text-telefya-green"
                 >
                   {copied ? <CheckCircle2 size={17} /> : <Copy size={17} />}
                   {copied ? "Copied" : "Copy room link"}
@@ -524,16 +597,18 @@ export default function LiveRoomPage() {
         "grid overflow-hidden bg-[#060b1f]",
       ].join(" ")}
     >
+      <MotionStyles />
+
       <section className="relative flex min-h-0 flex-col overflow-hidden bg-[#060b1f]">
-        <header className="flex h-[68px] shrink-0 items-center justify-between gap-4 border-b border-white/10 px-4">
-          <div className="flex min-w-0 items-center gap-4">
+        <header className="flex h-[60px] shrink-0 items-center justify-between gap-3 border-b border-white/10 px-3 sm:h-[68px] sm:gap-4 sm:px-4">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-4">
             <Image
               src="/images/telefya-logo.png"
               alt="Telefya"
               width={142}
               height={43}
               priority
-              className="h-9 w-auto shrink-0"
+              className="h-7 w-auto shrink-0 sm:h-9"
             />
 
             <div className="hidden min-w-0 border-l border-white/10 pl-4 sm:block">
@@ -546,7 +621,7 @@ export default function LiveRoomPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <TopPill
               icon={room.connected ? ShieldCheck : Loader2}
               label={room.connected ? "Secure" : "Connecting"}
@@ -554,28 +629,37 @@ export default function LiveRoomPage() {
             />
 
             <IconPill icon={Users} label={`${participantCount} people`} />
-            <IconPill icon={RefreshCw} label="Sync" />
-            <IconPill icon={Globe2} label="Workspace" />
+
+            <span className="hidden sm:inline-flex">
+              <IconPill icon={RefreshCw} label="Sync" />
+            </span>
+
+            <span className="hidden sm:inline-flex">
+              <IconPill icon={Globe2} label="Workspace" />
+            </span>
 
             {raisedHandCount > 0 ? (
-              <IconPill
-                icon={Hand}
-                label={`${raisedHandCount} raised`}
-                tone="amber"
-              />
+              <span className="telefya-pop-in">
+                <IconPill
+                  icon={Hand}
+                  label={`${raisedHandCount} raised`}
+                  tone="amber"
+                />
+              </span>
             ) : null}
 
             {room.recording ? (
-              <span className="inline-flex h-9 items-center gap-2 rounded-full bg-red-500/15 px-3 text-xs font-black text-red-100 ring-1 ring-red-400/25">
+              <span className="telefya-pop-in inline-flex h-8 items-center gap-1.5 rounded-full bg-red-500/15 px-2.5 text-[11px] font-black text-red-100 ring-1 ring-red-400/25 sm:h-9 sm:gap-2 sm:px-3 sm:text-xs">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-red-400" />
-                REC {recordingElapsed}
+                <span className="hidden sm:inline">REC </span>
+                {recordingElapsed}
               </span>
             ) : null}
           </div>
         </header>
 
         {room.error || room.recordingError || billingNotice ? (
-          <div className="mx-4 mt-3 grid gap-2">
+          <div className="mx-3 mt-3 grid gap-2 sm:mx-4">
             {room.error ? (
               <NoticeBanner type="error" message={room.error} />
             ) : null}
@@ -595,7 +679,7 @@ export default function LiveRoomPage() {
 
         <div
           className={[
-            "grid min-h-0 flex-1 gap-3 bg-black p-2 pb-28",
+            "grid min-h-0 flex-1 gap-2 bg-black p-1.5 pb-28 sm:gap-3 sm:p-2",
             chatOpen ? "xl:grid-cols-[minmax(0,1fr)_320px]" : "xl:grid-cols-1",
           ].join(" ")}
         >
@@ -616,7 +700,7 @@ export default function LiveRoomPage() {
                 />
               ))
             ) : (
-              <div className="grid min-h-[420px] place-items-center rounded-xl bg-[#0a1636] text-white">
+              <div className="grid min-h-[320px] place-items-center rounded-xl bg-[#0a1636] text-white sm:min-h-[420px]">
                 <div className="flex items-center gap-3 text-sm font-black">
                   <Loader2
                     className="animate-spin text-telefya-blue"
@@ -643,6 +727,12 @@ export default function LiveRoomPage() {
               </div>
             ) : null}
 
+            {showSelfPreview && localTile ? (
+              <div className="telefya-tile-in absolute right-2.5 top-2.5 z-20 w-20 overflow-hidden rounded-lg border border-white/15 bg-black shadow-2xl sm:w-24 xl:hidden">
+                <StageTileView tile={localTile} compact />
+              </div>
+            ) : null}
+
             <div className="hidden">
               {audioStreams.map((stream) => (
                 <LiveAudioTrack key={stream.id} stream={stream.stream} />
@@ -661,8 +751,8 @@ export default function LiveRoomPage() {
 
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-36 bg-gradient-to-t from-black/55 to-transparent" />
 
-        <div className="absolute inset-x-0 bottom-6 z-30 flex justify-center px-4">
-          <div className="flex items-center gap-3">
+        <div className="absolute inset-x-0 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-30 flex justify-center px-3 sm:bottom-6 sm:px-4">
+          <div className="hidden items-center gap-3 xl:flex">
             <DockButton
               active={chatOpen}
               icon={MessageSquare}
@@ -705,35 +795,14 @@ export default function LiveRoomPage() {
               />
 
               {participantsOpen ? (
-                <div className="absolute bottom-[76px] left-1/2 w-[260px] -translate-x-1/2 overflow-hidden rounded-2xl border border-white/10 bg-white p-2 text-navy-900 shadow-enterprise">
+                <div className="telefya-tile-in absolute bottom-[76px] left-1/2 w-[260px] -translate-x-1/2 overflow-hidden rounded-2xl border border-white/10 bg-white p-2 text-navy-900 shadow-enterprise">
                   <p className="px-2 py-1.5 text-[11px] font-black uppercase tracking-[0.12em] text-navy-400">
                     Participants ({participantCount})
                   </p>
 
                   <div className="mt-1 grid max-h-64 gap-1 overflow-y-auto">
                     {allParticipantTiles.map((tile) => (
-                      <div
-                        key={tile.id}
-                        className="flex items-center gap-3 rounded-xl px-2 py-2"
-                      >
-                        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-navy-50 text-xs font-black text-navy-700">
-                          {getInitials(tile.name)}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate text-sm font-bold text-navy-800">
-                          {tile.name}
-                        </span>
-                        {tile.micOn === false ? (
-                          <MicOff
-                            size={14}
-                            className="shrink-0 text-navy-300"
-                          />
-                        ) : (
-                          <Mic
-                            size={14}
-                            className="shrink-0 text-emerald-500"
-                          />
-                        )}
-                      </div>
+                      <ParticipantRow key={tile.id} tile={tile} />
                     ))}
                   </div>
                 </div>
@@ -752,7 +821,7 @@ export default function LiveRoomPage() {
               />
 
               {moreOpen ? (
-                <div className="absolute bottom-[76px] left-1/2 w-[292px] -translate-x-1/2 overflow-hidden rounded-2xl border border-white/10 bg-white p-2 text-navy-900 shadow-enterprise">
+                <div className="telefya-tile-in absolute bottom-[76px] left-1/2 w-[292px] -translate-x-1/2 overflow-hidden rounded-2xl border border-white/10 bg-white p-2 text-navy-900 shadow-enterprise">
                   {isHost ? (
                     <MenuAction
                       disabled={
@@ -825,7 +894,157 @@ export default function LiveRoomPage() {
               onClick={leaveRoom}
             />
           </div>
+
+          <div className="flex w-full max-w-[340px] items-center justify-between gap-1 rounded-full border border-white/10 bg-white/10 px-2 py-2 shadow-2xl backdrop-blur-2xl xl:hidden">
+            <DockButton
+              size="md"
+              active={!room.micOn}
+              danger={!room.micOn}
+              icon={room.micOn ? Mic : MicOff}
+              label={room.micOn ? "Mute" : "Unmute"}
+              onClick={room.toggleMic}
+            />
+
+            <DockButton
+              size="md"
+              active={!room.cameraOn}
+              danger={!room.cameraOn}
+              icon={room.cameraOn ? Video : VideoOff}
+              label={room.cameraOn ? "Stop video" : "Start video"}
+              onClick={room.toggleCamera}
+            />
+
+            <div className="relative">
+              <DockButton
+                size="md"
+                active={chatOpen}
+                icon={MessageSquare}
+                label="Chat"
+                onClick={() => setChatOpen((value) => !value)}
+              />
+
+              {unreadCount > 0 && !chatOpen ? (
+                <span className="telefya-pop-in pointer-events-none absolute -right-1 -top-1 grid h-4 w-4 place-items-center rounded-full bg-red-500 text-[9px] font-black text-white">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              ) : null}
+            </div>
+
+            <DockButton
+              size="md"
+              active={moreOpen}
+              icon={MoreHorizontal}
+              label="More"
+              onClick={() => setMoreOpen((value) => !value)}
+            />
+
+            <DockButton
+              size="md"
+              danger
+              icon={PhoneOff}
+              label="Leave"
+              onClick={leaveRoom}
+            />
+          </div>
         </div>
+
+        <MobileSheet
+          open={moreOpen}
+          onClose={() => setMoreOpen(false)}
+          title="More options"
+        >
+          <MenuAction
+            active={room.screenOn}
+            icon={room.screenOn ? ScreenShareOff : MonitorUp}
+            label={room.screenOn ? "Stop sharing" : "Share screen"}
+            caption="Share your screen with everyone"
+            onClick={() => {
+              setMoreOpen(false);
+              room.toggleScreenShare();
+            }}
+          />
+
+          <MenuAction
+            icon={Users}
+            label={`Participants (${participantCount})`}
+            caption="See who is in the meeting"
+            onClick={() => {
+              setMoreOpen(false);
+              setParticipantsOpen(true);
+            }}
+          />
+
+          {isHost ? (
+            <MenuAction
+              disabled={
+                recordingAction || (!room.recording && !recordingReady)
+              }
+              danger={room.recording}
+              icon={room.recording ? CircleStop : Radio}
+              label={
+                recordingAction
+                  ? room.recording
+                    ? "Stopping..."
+                    : "Starting..."
+                  : room.recording
+                    ? "Stop recording"
+                    : "Start recording"
+              }
+              caption={
+                room.recording
+                  ? "Finalize and send to Analytics"
+                  : recordingReady
+                    ? "Record clean meeting stage"
+                    : "Waiting for meeting media"
+              }
+              onClick={() => {
+                setMoreOpen(false);
+                toggleRecording();
+              }}
+            />
+          ) : null}
+
+          <MenuAction
+            active={handRaised}
+            icon={Hand}
+            label={handRaised ? "Lower hand" : "Raise hand"}
+            caption="Signal the host"
+            onClick={() => {
+              setMoreOpen(false);
+              room.toggleHand();
+            }}
+          />
+
+          <MenuAction
+            active={copied}
+            icon={copied ? CheckCircle2 : Copy}
+            label={copied ? "Invite copied" : "Copy invite"}
+            caption="Share this room link"
+            onClick={() => {
+              setMoreOpen(false);
+              copyRoomLink();
+            }}
+          />
+        </MobileSheet>
+
+        <MobileSheet
+          open={participantsOpen}
+          onClose={() => setParticipantsOpen(false)}
+          title={`Participants (${participantCount})`}
+        >
+          <div className="grid gap-1">
+            {allParticipantTiles.map((tile) => (
+              <ParticipantRow key={tile.id} tile={tile} />
+            ))}
+          </div>
+        </MobileSheet>
+
+        <MobileChatSheet
+          open={chatOpen}
+          onClose={() => setChatOpen(false)}
+          messages={room.messages as ChatMessage[]}
+          onSend={room.sendMessage}
+        />
 
         {room.recordingNotice ? (
           <Toast type="success">
@@ -884,7 +1103,7 @@ function EmbeddedChatPanel({
         <div className="flex items-center gap-1.5">
           <button
             onClick={onClose}
-            className="grid h-8 w-8 place-items-center rounded-lg bg-white/5 text-white/70 hover:bg-white/10 hover:text-white"
+            className="grid h-8 w-8 place-items-center rounded-lg bg-white/5 text-white/70 transition active:scale-90 hover:bg-white/10 hover:text-white"
             title="Collapse chat"
           >
             <ChevronsRight size={16} />
@@ -892,7 +1111,7 @@ function EmbeddedChatPanel({
 
           <button
             onClick={onClose}
-            className="grid h-8 w-8 place-items-center rounded-lg bg-white/5 text-white/70 hover:bg-white/10 hover:text-white"
+            className="grid h-8 w-8 place-items-center rounded-lg bg-white/5 text-white/70 transition active:scale-90 hover:bg-white/10 hover:text-white"
             title="Close chat"
           >
             <X size={16} />
@@ -948,7 +1167,7 @@ function EmbeddedChatPanel({
 
           <button
             type="submit"
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-telefya-blue text-white hover:bg-telefya-violet"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-telefya-blue text-white transition active:scale-90 hover:bg-telefya-violet"
             title="Send message"
           >
             <Send size={16} />
@@ -956,6 +1175,201 @@ function EmbeddedChatPanel({
         </div>
       </form>
     </aside>
+  );
+}
+
+function MobileSheet({
+  open,
+  onClose,
+  title,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="xl:hidden">
+      <div
+        onClick={onClose}
+        aria-hidden="true"
+        className={[
+          "fixed inset-0 z-40 bg-black/50 transition-opacity duration-300",
+          open ? "opacity-100" : "pointer-events-none opacity-0",
+        ].join(" ")}
+      />
+
+      <div
+        className={[
+          "fixed inset-x-0 bottom-0 z-50 max-h-[80vh] rounded-t-3xl bg-white shadow-2xl transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+          open ? "translate-y-0" : "translate-y-full",
+        ].join(" ")}
+      >
+        <div className="mx-auto mt-2.5 h-1.5 w-10 rounded-full bg-navy-200" />
+
+        <div className="flex items-center justify-between px-5 pb-3 pt-3">
+          <h2 className="text-base font-black text-navy-900">{title}</h2>
+
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="grid h-8 w-8 place-items-center rounded-lg bg-navy-50 text-navy-500 transition active:scale-90"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="max-h-[calc(80vh-64px)] overflow-y-auto px-3 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MobileChatSheet({
+  open,
+  onClose,
+  messages,
+  onSend,
+}: {
+  open: boolean;
+  onClose: () => void;
+  messages: ChatMessage[];
+  onSend: (message: string) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    scrollRef.current?.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [messages.length, open]);
+
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const clean = draft.trim();
+    if (!clean) return;
+
+    onSend(clean);
+    setDraft("");
+  }
+
+  return (
+    <div className="xl:hidden">
+      <div
+        onClick={onClose}
+        aria-hidden="true"
+        className={[
+          "fixed inset-0 z-40 bg-black/50 transition-opacity duration-300",
+          open ? "opacity-100" : "pointer-events-none opacity-0",
+        ].join(" ")}
+      />
+
+      <div
+        className={[
+          "fixed inset-x-0 bottom-0 z-50 flex h-[85vh] flex-col rounded-t-3xl bg-[#0c1734] text-white shadow-2xl transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)]",
+          open ? "translate-y-0" : "translate-y-full",
+        ].join(" ")}
+      >
+        <div className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-white/20" />
+
+        <div className="flex shrink-0 items-center justify-between px-5 pb-3 pt-3">
+          <h2 className="text-lg font-black">Chat</h2>
+
+          <button
+            onClick={onClose}
+            aria-label="Close chat"
+            className="grid h-8 w-8 place-items-center rounded-lg bg-white/10 text-white/70 transition active:scale-90"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-2">
+          {messages.length === 0 ? (
+            <p className="text-sm font-bold leading-6 text-white/45">
+              Meeting messages appear here.
+            </p>
+          ) : (
+            <div className="grid gap-4 pb-2">
+              {messages.map((message, index) => (
+                <div
+                  key={
+                    message.messageId ||
+                    `${message.socketId || "msg"}-${index}`
+                  }
+                  className="grid gap-1.5"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-7 w-7 place-items-center rounded-full bg-white/10 text-[11px] font-black text-white">
+                      {getInitials(message.userName || "Participant")}
+                    </span>
+                    <span className="min-w-0 truncate text-sm font-black text-white/90">
+                      {message.userName || "Participant"}
+                    </span>
+                    {message.time ? (
+                      <span className="text-xs font-bold text-white/35">
+                        {message.time}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="ml-9 rounded-xl bg-white/8 px-4 py-3 text-sm font-semibold leading-6 text-white/75">
+                    {message.message}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <form
+          onSubmit={submit}
+          className="shrink-0 border-t border-white/10 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
+        >
+          <div className="flex h-12 items-center gap-2 rounded-xl bg-white/8 px-3">
+            <input
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder="Type a message..."
+              className="min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none placeholder:text-white/35"
+            />
+
+            <button
+              type="submit"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-telefya-blue text-white transition active:scale-90 hover:bg-telefya-violet"
+              title="Send message"
+            >
+              <Send size={16} />
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function ParticipantRow({ tile }: { tile: StageTile }) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl px-2 py-2 transition hover:bg-navy-50">
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-navy-50 text-xs font-black text-navy-700">
+        {getInitials(tile.name)}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-sm font-bold text-navy-800">
+        {tile.name}
+      </span>
+      {tile.micOn === false ? (
+        <MicOff size={14} className="shrink-0 text-navy-300" />
+      ) : (
+        <Mic size={14} className="shrink-0 text-emerald-500" />
+      )}
+    </div>
   );
 }
 
@@ -973,8 +1387,8 @@ function StageTileView({
   return (
     <div
       className={[
-        "relative min-h-0 overflow-hidden rounded-md bg-black ring-1 ring-white/5",
-        compact ? "aspect-video" : "min-h-[220px]",
+        "telefya-tile-in relative min-h-0 overflow-hidden rounded-md bg-black ring-1 ring-white/5",
+        compact ? "aspect-video" : "min-h-[160px] sm:min-h-[220px]",
       ].join(" ")}
     >
       {recording ? (
@@ -1017,25 +1431,27 @@ function StageTileView({
 
 function AvatarTile({ tile, compact }: { tile: StageTile; compact?: boolean }) {
   return (
-    <div className="grid h-full min-h-[180px] place-items-center bg-[#07122d] text-white">
+    <div className="grid h-full min-h-[140px] place-items-center bg-[#07122d] text-white sm:min-h-[180px]">
       <div className="grid place-items-center text-center">
         <div
           className={[
             "telefya-gradient grid place-items-center rounded-full font-black text-white shadow-2xl",
-            compact ? "h-16 w-16 text-xl" : "h-28 w-28 text-4xl",
+            compact ? "h-14 w-14 text-lg sm:h-16 sm:w-16 sm:text-xl" : "h-20 w-20 text-3xl sm:h-28 sm:w-28 sm:text-4xl",
           ].join(" ")}
         >
           {getInitials(tile.name)}
         </div>
         <p
           className={[
-            "mt-4 max-w-[220px] truncate font-black text-white",
-            compact ? "text-sm" : "text-xl",
+            "mt-3 max-w-[220px] truncate font-black text-white sm:mt-4",
+            compact ? "text-xs sm:text-sm" : "text-base sm:text-xl",
           ].join(" ")}
         >
           {tile.name}
         </p>
-        <p className="mt-1 text-xs font-bold text-white/45">Camera off</p>
+        <p className="mt-1 text-[11px] font-bold text-white/45 sm:text-xs">
+          Camera off
+        </p>
       </div>
     </div>
   );
@@ -1051,9 +1467,9 @@ function TopPill({
   spin?: boolean;
 }) {
   return (
-    <span className="inline-flex h-9 items-center gap-2 rounded-full bg-emerald-500/12 px-3 text-xs font-black text-emerald-100 ring-1 ring-emerald-400/20">
+    <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-emerald-500/12 px-2.5 text-[11px] font-black text-emerald-100 ring-1 ring-emerald-400/20 sm:h-9 sm:gap-2 sm:px-3 sm:text-xs">
       <Icon size={14} className={spin ? "animate-spin" : ""} />
-      {label}
+      <span className="hidden sm:inline">{label}</span>
     </span>
   );
 }
@@ -1071,7 +1487,7 @@ function IconPill({
     <span
       title={label}
       className={[
-        "grid h-9 w-9 place-items-center rounded-full ring-1",
+        "grid h-8 w-8 place-items-center rounded-full ring-1 sm:h-9 sm:w-9",
         tone === "amber"
           ? "bg-amber-500/15 text-amber-100 ring-amber-400/25"
           : "bg-white/5 text-white/80 ring-white/10",
@@ -1102,7 +1518,7 @@ function Toast({
   return (
     <div
       className={[
-        "absolute right-5 top-[84px] z-40 flex max-w-xs items-start gap-3 rounded-lg border border-white/10 bg-[#0c1734]/95 px-4 py-3 text-xs font-semibold shadow-lg backdrop-blur-xl",
+        "telefya-toast-in absolute left-3 right-3 top-[72px] z-40 flex items-start gap-3 rounded-lg border border-white/10 bg-[#0c1734]/95 px-4 py-3 text-xs font-semibold shadow-lg backdrop-blur-xl sm:left-auto sm:right-5 sm:top-[84px] sm:max-w-xs",
         textTone[type],
       ].join(" ")}
     >
@@ -1199,12 +1615,14 @@ function DockButton({
   icon: Icon,
   label,
   onClick,
+  size = "lg",
 }: {
   active?: boolean;
   danger?: boolean;
   icon: LucideIcon;
   label: string;
   onClick: () => void;
+  size?: "md" | "lg";
 }) {
   return (
     <button
@@ -1212,7 +1630,8 @@ function DockButton({
       title={label}
       aria-label={label}
       className={[
-        "grid h-14 w-14 shrink-0 place-items-center rounded-full shadow-lg transition",
+        "grid shrink-0 place-items-center rounded-full shadow-lg transition-all duration-200 active:scale-90",
+        size === "lg" ? "h-14 w-14" : "h-12 w-12",
         danger
           ? "bg-red-500 text-white hover:bg-red-600"
           : active
@@ -1220,7 +1639,7 @@ function DockButton({
             : "bg-white/10 text-white/85 backdrop-blur-md hover:bg-white/20 hover:text-white",
       ].join(" ")}
     >
-      <Icon size={20} />
+      <Icon size={size === "lg" ? 20 : 18} />
     </button>
   );
 }
@@ -1247,7 +1666,7 @@ function MenuAction({
       onClick={onClick}
       disabled={disabled}
       className={[
-        "flex w-full items-center gap-3 rounded-xl p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-45",
+        "flex w-full items-center gap-3 rounded-xl p-3 text-left transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-45 disabled:active:scale-100",
         danger
           ? "text-red-600 hover:bg-red-50"
           : active

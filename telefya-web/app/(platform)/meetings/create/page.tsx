@@ -36,7 +36,7 @@ export default function CreateMeetingPage() {
   const [title, setTitle] = useState("Telefya meeting");
   const [date, setDate] = useState(getLocalDateTimeValue());
   const [timeZone, setTimeZone] = useState(
-    Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"
+    Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
   );
   const [roomId, setRoomId] = useState(createRoomId());
   const [loading, setLoading] = useState(false);
@@ -65,7 +65,9 @@ export default function CreateMeetingPage() {
 
       setCreatedLink(meetingPath);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to schedule meeting.");
+      setError(
+        err instanceof Error ? err.message : "Unable to schedule meeting.",
+      );
     } finally {
       setLoading(false);
     }
@@ -80,8 +82,8 @@ export default function CreateMeetingPage() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+    <main className="mx-auto max-w-6xl pb-4">
+      <div className="mb-5 flex flex-col gap-3 sm:mb-6 sm:flex-row sm:items-center sm:justify-between">
         <Link
           href="/lobby"
           className="inline-flex items-center gap-2 text-sm font-black text-navy-500 transition-all duration-200 hover:text-telefya-blue"
@@ -92,21 +94,21 @@ export default function CreateMeetingPage() {
 
         <button
           onClick={() => router.refresh()}
-          className="inline-flex h-10 items-center gap-2 rounded-xl border border-border bg-white px-4 text-sm font-black text-navy-700 transition-all duration-200 hover:border-telefya-blue hover:text-telefya-blue"
+          className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl border border-border bg-white px-4 text-sm font-black text-navy-700 transition-all duration-200 hover:border-telefya-blue hover:text-telefya-blue sm:w-auto"
         >
           <RefreshCcw size={16} />
           Refresh
         </button>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
-        <section className="rounded-xl border border-border bg-white p-8 shadow-soft transition-shadow duration-200 hover:shadow-enterprise">
+      <div className="grid gap-5 sm:gap-6 lg:grid-cols-2 lg:items-start">
+        <section className="rounded-xl border border-border bg-white p-5 shadow-soft transition-shadow duration-200 hover:shadow-enterprise sm:p-8">
           <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-telefya-blue">
             <Sparkles size={15} />
             Meeting setup
           </div>
 
-          <h1 className="mt-6 text-3xl font-black leading-tight text-navy-900">
+          <h1 className="mt-5 text-[clamp(1.9rem,8vw,2.25rem)] font-black leading-tight text-navy-900 sm:mt-6">
             Create a secure Telefya meeting
           </h1>
 
@@ -115,7 +117,7 @@ export default function CreateMeetingPage() {
             you are ready to test camera, mic, chat, and screen sharing.
           </p>
 
-          <div className="mt-8 grid gap-3">
+          <div className="mt-6 grid gap-3 sm:mt-8">
             {[
               "Host starts the room first",
               "Participants join using the meeting link",
@@ -123,12 +125,14 @@ export default function CreateMeetingPage() {
             ].map((item) => (
               <div
                 key={item}
-                className="flex items-center gap-3 rounded-xl border border-border bg-navy-50 p-4 transition-all duration-200 hover:border-telefya-blue/30"
+                className="flex items-center gap-3 rounded-xl border border-border bg-navy-50 p-3 transition-all duration-200 hover:border-telefya-blue/30 sm:p-4"
               >
                 <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[linear-gradient(135deg,rgba(15,107,255,0.12),rgba(100,38,255,0.1))] text-telefya-blue ring-1 ring-border">
                   <MonitorUp size={17} />
                 </span>
-                <span className="text-sm font-bold text-navy-700">{item}</span>
+                <span className="text-sm font-bold leading-6 text-navy-700">
+                  {item}
+                </span>
               </div>
             ))}
           </div>
@@ -137,15 +141,15 @@ export default function CreateMeetingPage() {
             <p className="text-xs font-black uppercase tracking-[0.14em] text-navy-300">
               Generated room link
             </p>
-            <p className="mt-2 break-all text-sm font-bold text-navy-700">
+            <p className="mt-2 break-all text-sm font-bold leading-6 text-navy-700">
               {meetingPath}
             </p>
           </div>
         </section>
 
-        <section className="rounded-xl border border-border bg-white p-8 shadow-soft transition-shadow duration-200 hover:shadow-enterprise">
+        <section className="rounded-xl border border-border bg-white p-5 shadow-soft transition-shadow duration-200 hover:shadow-enterprise sm:p-8">
           <div className="flex items-start justify-between gap-4">
-            <div>
+            <div className="min-w-0">
               <p className="text-xs font-black uppercase tracking-[0.16em] text-navy-300">
                 New meeting
               </p>
@@ -181,7 +185,7 @@ export default function CreateMeetingPage() {
               />
             </label>
 
-            <div className="grid gap-5 md:grid-cols-2">
+            <div className="grid gap-5 sm:grid-cols-2">
               <label className="grid gap-2">
                 <span className="text-sm font-black text-navy-900">
                   Date and time
@@ -190,7 +194,7 @@ export default function CreateMeetingPage() {
                   type="datetime-local"
                   value={date}
                   onChange={(event) => setDate(event.target.value)}
-                  className="h-12 rounded-xl border border-border bg-white px-4 text-sm font-semibold text-navy-900 outline-none transition-all duration-200 focus:border-telefya-blue focus:ring-2 focus:ring-telefya-blue/15"
+                  className="h-12 min-w-0 rounded-xl border border-border bg-white px-3 text-sm font-semibold text-navy-900 outline-none transition-all duration-200 focus:border-telefya-blue focus:ring-2 focus:ring-telefya-blue/15 sm:px-4"
                   required
                 />
               </label>
@@ -202,7 +206,7 @@ export default function CreateMeetingPage() {
                 <input
                   value={timeZone}
                   onChange={(event) => setTimeZone(event.target.value)}
-                  className="h-12 rounded-xl border border-border bg-white px-4 text-sm font-semibold text-navy-900 outline-none transition-all duration-200 focus:border-telefya-blue focus:ring-2 focus:ring-telefya-blue/15"
+                  className="h-12 min-w-0 rounded-xl border border-border bg-white px-3 text-sm font-semibold text-navy-900 outline-none transition-all duration-200 focus:border-telefya-blue focus:ring-2 focus:ring-telefya-blue/15 sm:px-4"
                   required
                 />
               </label>
@@ -210,6 +214,7 @@ export default function CreateMeetingPage() {
 
             <label className="grid gap-2">
               <span className="text-sm font-black text-navy-900">Room ID</span>
+
               <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
                 <input
                   value={roomId}
@@ -217,6 +222,7 @@ export default function CreateMeetingPage() {
                   className="h-12 min-w-0 rounded-xl border border-border bg-white px-4 text-sm font-semibold text-navy-900 outline-none transition-all duration-200 focus:border-telefya-blue focus:ring-2 focus:ring-telefya-blue/15"
                   required
                 />
+
                 <button
                   type="button"
                   onClick={() => setRoomId(createRoomId())}
@@ -231,7 +237,7 @@ export default function CreateMeetingPage() {
               <p className="text-xs font-black uppercase tracking-[0.12em] text-navy-300">
                 Meeting link
               </p>
-              <p className="mt-2 break-all text-sm font-bold text-navy-700">
+              <p className="mt-2 break-all text-sm font-bold leading-6 text-navy-700">
                 {meetingPath}
               </p>
             </div>
@@ -253,14 +259,14 @@ export default function CreateMeetingPage() {
                 <p className="font-black text-navy-900">Meeting created</p>
               </div>
 
-              <p className="mt-2 break-all text-sm font-semibold text-navy-600">
+              <p className="mt-2 break-all text-sm font-semibold leading-6 text-navy-600">
                 {createdLink}
               </p>
 
-              <div className="mt-4 flex flex-wrap gap-3">
+              <div className="mt-4 grid gap-3 sm:flex">
                 <button
                   onClick={copyLink}
-                  className="inline-flex h-11 items-center gap-2 rounded-xl border border-border bg-white px-4 text-sm font-black text-navy-900 transition-all duration-200 hover:border-telefya-green hover:text-telefya-green"
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-border bg-white px-4 text-sm font-black text-navy-900 transition-all duration-200 hover:border-telefya-green hover:text-telefya-green"
                 >
                   {copied ? <CheckCircle2 size={17} /> : <Copy size={17} />}
                   {copied ? "Copied" : "Copy link"}
@@ -269,9 +275,9 @@ export default function CreateMeetingPage() {
                 <Link
                   href={createdLink.replace(
                     typeof window !== "undefined" ? window.location.origin : "",
-                    ""
+                    "",
                   )}
-                  className="inline-flex h-11 items-center gap-2 rounded-xl bg-navy-900 px-4 text-sm font-black text-white transition-all duration-200 hover:bg-telefya-violet"
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-navy-900 px-4 text-sm font-black text-white transition-all duration-200 hover:bg-telefya-violet"
                 >
                   <Video size={17} />
                   Start room
@@ -282,7 +288,7 @@ export default function CreateMeetingPage() {
         </section>
       </div>
 
-      <section className="mt-6 grid gap-5 md:grid-cols-3">
+      <section className="mt-5 grid gap-4 sm:mt-6 sm:grid-cols-2 xl:grid-cols-3">
         <article className="rounded-xl border border-border bg-white p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:shadow-enterprise">
           <ShieldCheck size={22} className="text-telefya-green" />
           <h3 className="mt-4 font-black text-navy-900">Authenticated</h3>

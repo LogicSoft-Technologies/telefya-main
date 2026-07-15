@@ -14,6 +14,7 @@ import {
   Landmark,
   LayoutDashboard,
   LogOut,
+  Menu,
   MessageSquare,
   MonitorUp,
   Phone,
@@ -24,6 +25,7 @@ import {
   Sparkles,
   Users,
   Video,
+  X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { logout as logoutRequest } from "@/lib/api/auth";
@@ -114,6 +116,7 @@ const resourceItems = [
 ];
 
 type MenuKey = "product" | "solutions" | "resources" | "apps";
+type MobileSectionKey = "product" | "solutions" | "resources";
 
 function getFullName(user: NavUser | null | undefined) {
   return [user?.first_name, user?.last_name].filter(Boolean).join(" ").trim();
@@ -194,6 +197,8 @@ function useMarketingAuth() {
 export function MarketingNavbar() {
   const { authed, user, name } = useMarketingAuth();
   const [openMenu, setOpenMenu] = useState<MenuKey | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [mobileSection, setMobileSection] = useState<MobileSectionKey | null>(null);
   const navRef = useRef<HTMLElement>(null);
 
   const initials = name
@@ -210,6 +215,15 @@ export function MarketingNavbar() {
     setOpenMenu((prev) => (prev === key ? null : key));
   }
 
+  function toggleMobileSection(key: MobileSectionKey) {
+    setMobileSection((prev) => (prev === key ? null : key));
+  }
+
+  function closeMobileMenu() {
+    setMobileOpen(false);
+    setMobileSection(null);
+  }
+
   useEffect(() => {
     function onOutside(event: MouseEvent) {
       if (navRef.current && !navRef.current.contains(event.target as Node)) {
@@ -224,6 +238,13 @@ export function MarketingNavbar() {
     };
   }, []);
 
+  useEffect(() => {
+    document.body.style.overflow = mobileOpen ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileOpen]);
+
   async function handleLogout() {
     try {
       const token = getAccessToken();
@@ -235,6 +256,7 @@ export function MarketingNavbar() {
       clearUser();
       window.dispatchEvent(new Event("telefya-auth-change"));
       setOpenMenu(null);
+      closeMobileMenu();
     }
   }
 
@@ -251,7 +273,7 @@ export function MarketingNavbar() {
     <header className="sticky top-0 z-50 border-b border-border bg-white/95 backdrop-blur-xl">
       <nav
         ref={navRef}
-        className="relative mx-auto flex h-[68px] max-w-[96rem] items-center justify-between gap-6 px-5 lg:px-8"
+        className="relative mx-auto flex h-[68px] max-w-[96rem] items-center justify-between gap-3 px-4 sm:gap-6 sm:px-5 lg:px-8"
       >
         <Link href="/" className="shrink-0">
           <Image
@@ -260,7 +282,7 @@ export function MarketingNavbar() {
             width={154}
             height={46}
             priority
-            className="h-9 w-auto"
+            className="h-8 w-auto sm:h-9"
           />
         </Link>
 
@@ -405,12 +427,29 @@ export function MarketingNavbar() {
           </button>
         </div>
 
-        <Link
-          href={authed ? "/lobby" : "/login"}
-          className="rounded-xl bg-telefya-blue px-4 py-2 text-sm font-semibold text-white shadow-soft lg:hidden"
-        >
-          {authed ? "Workspace" : "Sign in"}
-        </Link>
+        <div className="flex items-center gap-2 lg:hidden">
+          <Link
+            href={authed ? "/lobby" : "/login"}
+            onClick={closeMobileMenu}
+            className="inline-flex h-10 items-center rounded-xl bg-telefya-blue px-3.5 text-sm font-semibold text-white shadow-soft sm:px-4"
+          >
+            {authed ? "Workspace" : "Sign in"}
+          </Link>
+
+          <button
+            onClick={() => setMobileOpen((value) => !value)}
+            aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileOpen}
+            className={[
+              "grid h-10 w-10 shrink-0 place-items-center rounded-xl border transition",
+              mobileOpen
+                ? "border-telefya-blue bg-blue-50 text-telefya-blue"
+                : "border-border text-navy-700 hover:bg-navy-50",
+            ].join(" ")}
+          >
+            {mobileOpen ? <X size={19} /> : <Menu size={19} />}
+          </button>
+        </div>
 
         {openMenu === "product" ? (
           <div className="absolute left-1/2 top-full hidden w-[680px] -translate-x-1/2 overflow-hidden rounded-b-xl border border-t-0 border-border bg-white shadow-enterprise lg:block">
@@ -562,7 +601,212 @@ export function MarketingNavbar() {
             </div>
           </div>
         ) : null}
+
+        {mobileOpen ? (
+          <div className="absolute inset-x-0 top-full z-40 max-h-[calc(100vh-68px)] overflow-y-auto border-t border-border bg-white shadow-enterprise lg:hidden">
+            <div className="telefya-accent-line h-1" />
+
+            <div className="grid gap-1 p-4">
+              <MobileAccordion
+                label="Product"
+                open={mobileSection === "product"}
+                onToggle={() => toggleMobileSection("product")}
+              >
+                <div className="grid gap-1 pb-2 pl-1 pt-1">
+                  {productItems.map((item) => (
+                    <Link
+                      key={item.title}
+                      href={item.href}
+                      onClick={closeMobileMenu}
+                      className="flex items-center gap-3 rounded-lg p-2.5 hover:bg-navy-50"
+                    >
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-telefya-blue">
+                        <item.icon size={16} />
+                      </span>
+                      <span>
+                        <strong className="block text-sm font-semibold text-navy-900">
+                          {item.title}
+                        </strong>
+                        <span className="mt-0.5 block text-xs font-semibold leading-5 text-navy-500">
+                          {item.desc}
+                        </span>
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </MobileAccordion>
+
+              <MobileAccordion
+                label="Solutions"
+                open={mobileSection === "solutions"}
+                onToggle={() => toggleMobileSection("solutions")}
+              >
+                <div className="grid grid-cols-2 gap-1 pb-2 pl-1 pt-1">
+                  {solutionItems.map((item) => (
+                    <Link
+                      key={item.title}
+                      href={item.href}
+                      onClick={closeMobileMenu}
+                      className="flex items-center gap-2.5 rounded-lg p-2.5 hover:bg-navy-50"
+                    >
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-telefya-blue">
+                        <item.icon size={16} />
+                      </span>
+                      <span className="text-xs font-semibold leading-tight text-navy-900">
+                        {item.title}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </MobileAccordion>
+
+              <Link
+                href="#pricing"
+                onClick={closeMobileMenu}
+                className="rounded-lg px-2.5 py-3 text-sm font-semibold text-navy-700 hover:bg-navy-50"
+              >
+                Pricing
+              </Link>
+
+              <MobileAccordion
+                label="Resources"
+                open={mobileSection === "resources"}
+                onToggle={() => toggleMobileSection("resources")}
+              >
+                <div className="grid gap-1 pb-2 pl-1 pt-1">
+                  {resourceItems.map((item) => (
+                    <Link
+                      key={item.title}
+                      href={item.href}
+                      onClick={closeMobileMenu}
+                      className="flex items-center gap-3 rounded-lg p-2.5 hover:bg-navy-50"
+                    >
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-telefya-blue">
+                        <item.icon size={16} />
+                      </span>
+                      <span>
+                        <strong className="block text-sm font-semibold text-navy-900">
+                          {item.title}
+                        </strong>
+                        <span className="mt-0.5 block text-xs font-semibold leading-5 text-navy-500">
+                          {item.desc}
+                        </span>
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </MobileAccordion>
+
+              <Link
+                href="#company"
+                onClick={closeMobileMenu}
+                className="rounded-lg px-2.5 py-3 text-sm font-semibold text-navy-700 hover:bg-navy-50"
+              >
+                Company
+              </Link>
+
+              <Link
+                href="/contact-sales"
+                onClick={closeMobileMenu}
+                className="rounded-lg px-2.5 py-3 text-sm font-semibold text-navy-700 hover:bg-navy-50"
+              >
+                Contact Sales
+              </Link>
+            </div>
+
+            <div className="border-t border-border p-4">
+              {authed ? (
+                <div className="grid gap-3">
+                  <div className="flex items-center gap-3 rounded-xl border border-border bg-navy-50 px-3 py-2.5">
+                    <div className="telefya-gradient grid h-9 w-9 shrink-0 overflow-hidden rounded-lg text-xs font-semibold text-white">
+                      {profileImageUrl ? (
+                        <img
+                          src={profileImageUrl}
+                          alt={name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span className="grid h-full w-full place-items-center">
+                          {initials || "U"}
+                        </span>
+                      )}
+                    </div>
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-navy-900">
+                      {name}
+                    </span>
+                  </div>
+
+                  <Link
+                    href="/lobby"
+                    onClick={closeMobileMenu}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-telefya-blue text-sm font-semibold text-white shadow-soft hover:bg-telefya-violet"
+                  >
+                    <LayoutDashboard size={16} />
+                    Workspace
+                  </Link>
+
+                  <button
+                    onClick={handleLogout}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-border text-sm font-semibold text-navy-700 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                  >
+                    <LogOut size={16} />
+                    Log out
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <Link
+                    href="/login"
+                    onClick={closeMobileMenu}
+                    className="inline-flex h-11 items-center justify-center rounded-xl border border-border text-sm font-semibold text-navy-700 hover:bg-navy-50"
+                  >
+                    Sign in
+                  </Link>
+                  <Link
+                    href="/register"
+                    onClick={closeMobileMenu}
+                    className="inline-flex h-11 items-center justify-center rounded-xl bg-telefya-blue text-sm font-semibold text-white shadow-soft hover:bg-telefya-violet"
+                  >
+                    Start free
+                  </Link>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : null}
       </nav>
     </header>
+  );
+}
+
+function MobileAccordion({
+  label,
+  open,
+  onToggle,
+  children,
+}: {
+  label: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <button
+        onClick={onToggle}
+        className={[
+          "flex w-full items-center justify-between rounded-lg px-2.5 py-3 text-sm font-semibold transition",
+          open ? "text-telefya-blue" : "text-navy-700 hover:bg-navy-50",
+        ].join(" ")}
+      >
+        {label}
+        <ChevronDown
+          size={16}
+          className={open ? "rotate-180 transition-transform" : "transition-transform"}
+        />
+      </button>
+
+      {open ? children : null}
+    </div>
   );
 }
