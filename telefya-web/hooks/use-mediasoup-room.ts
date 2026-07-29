@@ -12,6 +12,22 @@ import type {
   TransportOptions,
 } from "mediasoup-client/types";
 import { closeMeetingSocket, getMeetingSocket } from "@/lib/realtime/socket";
+import {
+  VirtualBackgroundEngine,
+  VirtualBackgroundError,
+  isVirtualBackgroundSupported,
+  type VirtualBackground,
+  type VirtualBackgroundEngineStatus,
+} from "@/lib/media/virtual-background";
+
+export type VirtualBackgroundStatus =
+  | "idle"
+  | "unsupported"
+  | "loading"
+  | "active"
+  | "error";
+
+const DEFAULT_VIRTUAL_BACKGROUND: VirtualBackground = { type: "none" };
 
 type RemoteStream = {
   id: string;
@@ -151,6 +167,21 @@ function normalizeParticipants(
   return Object.values(value);
 }
 
+function toHookStatus(
+  engineStatus: VirtualBackgroundEngineStatus,
+): VirtualBackgroundStatus {
+  switch (engineStatus) {
+    case "loading":
+      return "loading";
+    case "active":
+      return "active";
+    case "error":
+      return "error";
+    default:
+      return "idle";
+  }
+}
+
 export function useMediasoupRoom(params: {
   enabled: boolean;
   roomId: string;
@@ -159,6 +190,7 @@ export function useMediasoupRoom(params: {
   isHost: boolean;
   recordingMode?: boolean;
   recorderSecret?: string;
+  virtualBackground?: VirtualBackground;
 }) {
   const {
     enabled,
@@ -168,6 +200,7 @@ export function useMediasoupRoom(params: {
     isHost,
     recordingMode = false,
     recorderSecret,
+    virtualBackground = DEFAULT_VIRTUAL_BACKGROUND,
   } = params;
 
   const socketRef = useRef<ReturnType<typeof getMeetingSocket> | null>(null);
@@ -185,9 +218,13 @@ export function useMediasoupRoom(params: {
   const consumeChainRef = useRef(Promise.resolve());
   const localStreamRef = useRef<MediaStream | null>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
+  const sourceStreamRef = useRef<MediaStream | null>(null);
+
+  const engineRef = useRef<VirtualBackgroundEngine | null>(null);
+
   const startedRef = useRef(false);
   const remoteStreamsRef = useRef<RemoteStream[]>([]);
-
+  const virtualBackgroundRef = useRef<VirtualBackground>(virtualBackground);
   const [status, setStatus] = useState("Idle");
   const [error, setError] = useState("");
   const [connected, setConnected] = useState(false);
@@ -203,6 +240,7 @@ export function useMediasoupRoom(params: {
   const [micOn, setMicOn] = useState(true);
   const [cameraOn, setCameraOn] = useState(true);
   const [screenOn, setScreenOn] = useState(false);
+  const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const [recording, setRecording] = useState(false);
   const [recordingId, setRecordingId] = useState<string | null>(null);
   const [recordingError, setRecordingError] = useState("");
@@ -219,10 +257,19 @@ export function useMediasoupRoom(params: {
   const [billingPolicy, setBillingPolicy] = useState<BillingPolicy | null>(
     null,
   );
+  const [activeVirtualBackground, setActiveVirtualBackground] =
+    useState<VirtualBackground>(virtualBackground);
+  const [backgroundStatus, setBackgroundStatus] =
+    useState<VirtualBackgroundStatus>("idle");
+  const [backgroundError, setBackgroundError] = useState("");
 
   useEffect(() => {
     remoteStreamsRef.current = remoteStreams;
   }, [remoteStreams]);
+
+  useEffect(() => {
+    virtualBackgroundRef.current = virtualBackground;
+  }, [virtualBackground]);
 
   const updateParticipant = useCallback(
     (participant: Partial<ParticipantState> & { userId: string }) => {
@@ -541,6 +588,52 @@ export function useMediasoupRoom(params: {
     }
   }, [consumeProducer]);
 
+  const applyVirtualBackground = useCallback(
+    async (background: VirtualBackground) => {
+      setBackgroundError("");
+
+      if (recordingMode) {
+        setActiveVirtualBackground(background);
+        return;
+      }
+
+      const engine = engineRef.current;
+
+      if (!engine) {
+
+        setActiveVirtualBackground(background);
+        return;
+      }
+
+      if (background.type !== "none" && !isVirtualBackgroundSupported()) {
+        setBackgroundStatus("unsupported");
+        setBackgroundError(
+          "Virtual backgrounds are not supported on this browser or device.",
+        );
+        return;
+      }
+
+      try {
+        await engine.setBackground(background);
+        setActiveVirtualBackground(background);
+
+      } catch (err) {
+        console.error(
+          "[use-mediasoup-room] Failed to apply virtual background",
+          err,
+        );
+
+        setBackgroundStatus("error");
+        setBackgroundError(
+          err instanceof VirtualBackgroundError || err instanceof Error
+            ? err.message
+            : "Unable to apply the selected background.",
+        );
+      }
+    },
+    [recordingMode],
+  );
+
   const joinAndSetupRoom = useCallback(
     async (stream: MediaStream | null) => {
       const socket = socketRef.current;
@@ -659,7 +752,7 @@ export function useMediasoupRoom(params: {
     startedRef.current = true;
 
     setError("");
-    let stream: MediaStream | null = null;
+    let publishedStream: MediaStream | null = null;
 
     if (recordingMode) {
       setStatus("Connecting recorder...");
@@ -668,22 +761,90 @@ export function useMediasoupRoom(params: {
     } else {
       setStatus("Requesting camera access...");
 
+      let cameraStream: MediaStream;
+
+      const videoConstraints: MediaTrackConstraints = {
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 30 },
+      };
+
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
+        cameraStream = await navigator.mediaDevices.getUserMedia({
           audio: true,
-          video: true,
+          video: videoConstraints,
         });
       } catch {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: false,
-        });
+        try {
+          cameraStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: true,
+          });
+        } catch {
+          cameraStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: false,
+          });
 
-        setCameraOn(false);
+          setCameraOn(false);
+        }
       }
 
-      localStreamRef.current = stream;
-      setLocalStream(stream);
+      sourceStreamRef.current = cameraStream;
+      publishedStream = cameraStream;
+
+      const hasVideo = cameraStream.getVideoTracks().length > 0;
+
+      if (hasVideo && isVirtualBackgroundSupported()) {
+
+        const engine = new VirtualBackgroundEngine(cameraStream, {
+          onStatusChange: (engineStatus) => {
+            setBackgroundStatus(toHookStatus(engineStatus));
+          },
+          onFailure: (err) => {
+            console.error(
+              "[use-mediasoup-room] Virtual background failure",
+              err,
+            );
+            setBackgroundError(err.message);
+          },
+        });
+
+        engineRef.current = engine;
+
+        try {
+          const engineOutputStream = await engine.start();
+          publishedStream = engineOutputStream;
+
+          const requestedBackground = virtualBackgroundRef.current;
+
+          if (requestedBackground.type !== "none") {
+            await engine.setBackground(requestedBackground);
+          }
+
+          setActiveVirtualBackground(engine.currentBackground);
+        } catch (err) {
+          console.error(
+            "[use-mediasoup-room] Failed to start virtual background engine, falling back to raw camera",
+            err,
+          );
+
+          engineRef.current = null;
+          setBackgroundStatus("error");
+          setBackgroundError(
+            err instanceof VirtualBackgroundError || err instanceof Error
+              ? err.message
+              : "Unable to initialize the camera pipeline.",
+          );
+
+          publishedStream = cameraStream;
+        }
+      } else if (hasVideo) {
+        setBackgroundStatus("unsupported");
+      }
+
+      localStreamRef.current = publishedStream;
+      setLocalStream(publishedStream);
     }
 
     const socket = getMeetingSocket({
@@ -698,7 +859,7 @@ export function useMediasoupRoom(params: {
     socket.on("connect", async () => {
       try {
         setConnected(true);
-        await joinAndSetupRoom(stream);
+        await joinAndSetupRoom(publishedStream);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Meeting setup failed.");
         setStatus("Failed");
@@ -1020,7 +1181,7 @@ export function useMediasoupRoom(params: {
 
     if (socket.connected) {
       setConnected(true);
-      await joinAndSetupRoom(stream);
+      await joinAndSetupRoom(publishedStream);
     } else {
       socket.connect();
     }
@@ -1045,6 +1206,10 @@ export function useMediasoupRoom(params: {
     sendTransportRef.current?.close();
     recvTransportRef.current?.close();
 
+    engineRef.current?.stop();
+    engineRef.current = null;
+
+    stopStream(sourceStreamRef.current);
     stopStream(localStreamRef.current);
     stopStream(screenStreamRef.current);
 
@@ -1054,6 +1219,7 @@ export function useMediasoupRoom(params: {
     sendTransportRef.current = null;
     recvTransportRef.current = null;
     localStreamRef.current = null;
+    sourceStreamRef.current = null;
     screenStreamRef.current = null;
     deviceRef.current = null;
 
@@ -1071,12 +1237,16 @@ export function useMediasoupRoom(params: {
     setRecordingId(null);
     setRecordingError("");
     setScreenOn(false);
+    setScreenStream(null);
     setMicOn(true);
     setCameraOn(true);
     socketRef.current = null;
     setSocket(null);
     setBillingNotice(null);
     setBillingPolicy(null);
+
+    setBackgroundStatus("idle");
+    setBackgroundError("");
 
     closeMeetingSocket();
     startedRef.current = false;
@@ -1100,6 +1270,9 @@ export function useMediasoupRoom(params: {
     const next = !micOn;
     setMicOn(next);
 
+    sourceStreamRef.current?.getAudioTracks().forEach((track) => {
+      track.enabled = next;
+    });
     localStreamRef.current?.getAudioTracks().forEach((track) => {
       track.enabled = next;
     });
@@ -1128,7 +1301,7 @@ export function useMediasoupRoom(params: {
     const next = !cameraOn;
     setCameraOn(next);
 
-    localStreamRef.current?.getVideoTracks().forEach((track) => {
+    sourceStreamRef.current?.getVideoTracks().forEach((track) => {
       track.enabled = next;
     });
 
@@ -1159,6 +1332,7 @@ export function useMediasoupRoom(params: {
 
       stopStream(screenStreamRef.current);
       screenStreamRef.current = null;
+      setScreenStream(null);
 
       socketRef.current?.emit("stop-screen-share", {
         userId,
@@ -1172,13 +1346,14 @@ export function useMediasoupRoom(params: {
     const sendTransport = sendTransportRef.current;
     if (!sendTransport) return;
 
-    const screenStream = await navigator.mediaDevices.getDisplayMedia({
+    const capturedStream = await navigator.mediaDevices.getDisplayMedia({
       video: true,
       audio: false,
     });
 
-    const screenTrack = screenStream.getVideoTracks()[0];
-    screenStreamRef.current = screenStream;
+    const screenTrack = capturedStream.getVideoTracks()[0];
+    screenStreamRef.current = capturedStream;
+    setScreenStream(capturedStream);
 
     screenProducerRef.current = await sendTransport.produce({
       track: screenTrack,
@@ -1187,6 +1362,7 @@ export function useMediasoupRoom(params: {
 
     screenTrack.onended = () => {
       setScreenOn(false);
+      setScreenStream(null);
       screenProducerRef.current?.close();
       screenProducerRef.current = null;
 
@@ -1355,6 +1531,7 @@ export function useMediasoupRoom(params: {
     micOn,
     cameraOn,
     screenOn,
+    screenStream,
     toggleMic,
     toggleCamera,
     toggleScreenShare,
@@ -1375,5 +1552,9 @@ export function useMediasoupRoom(params: {
     billingNotice,
     billingPolicy,
     clearBillingNotice: () => setBillingNotice(null),
+    virtualBackground: activeVirtualBackground,
+    setVirtualBackground: applyVirtualBackground,
+    backgroundStatus,
+    backgroundError,
   };
 }

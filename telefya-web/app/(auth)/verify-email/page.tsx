@@ -91,11 +91,11 @@ function VerifyEmailContent() {
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_85%_10%,rgba(100,38,255,0.12),transparent_30%),radial-gradient(circle_at_15%_20%,rgba(15,107,255,0.1),transparent_28%),#ffffff]">
-      <div className="mx-auto grid min-h-screen max-w-[92rem] place-items-center px-5 py-10 lg:px-8">
+      <div className="mx-auto grid min-h-screen max-w-[92rem] place-items-center px-5 py-8 sm:py-10 lg:px-8">
         <section className="w-full max-w-md overflow-hidden rounded-2xl border border-border bg-white shadow-enterprise transition-shadow duration-200">
           <div className="telefya-accent-line h-1.5" />
 
-          <div className="p-6">
+          <div className="p-5 sm:p-6">
             <Link href="/" className="inline-flex transition-opacity duration-200 hover:opacity-80">
               <Image
                 src="/images/telefya-logo.png"
@@ -103,13 +103,13 @@ function VerifyEmailContent() {
                 width={150}
                 height={46}
                 priority
-                className="h-10 w-auto"
+                className="h-9 w-auto sm:h-10"
               />
             </Link>
 
             <div
               className={[
-                "mt-8 grid h-14 w-14 place-items-center rounded-2xl transition-colors duration-200",
+                "mt-7 grid h-14 w-14 place-items-center rounded-2xl transition-colors duration-200 sm:mt-8",
                 verified
                   ? "bg-emerald-50 text-telefya-green"
                   : "bg-blue-50 text-telefya-blue",
@@ -118,11 +118,11 @@ function VerifyEmailContent() {
               {verified ? <CheckCircle2 size={28} /> : <MailCheck size={28} />}
             </div>
 
-            <h1 className="mt-6 text-3xl font-black text-navy-900">
+            <h1 className="mt-6 font-heading text-2xl font-black text-navy-900 sm:text-3xl">
               {verified ? "Email verified" : "Verify your email"}
             </h1>
 
-            <p className="mt-3 leading-7 text-navy-500">
+            <p className="mt-3 font-body leading-7 text-navy-500">
               {verified
                 ? "Your account is active. We are taking you to the login page."
                 : "Enter the OTP sent to your email address to activate your Telefya account."}
@@ -166,7 +166,7 @@ function VerifyEmailContent() {
                   }
                   placeholder="123456"
                   disabled={verified}
-                  className="h-12 rounded-xl border border-border bg-white px-4 text-center text-lg font-black tracking-[0.35em] text-navy-900 shadow-soft outline-none transition-all duration-200 placeholder:text-navy-300 focus:border-telefya-blue focus:ring-2 focus:ring-telefya-blue/15 disabled:cursor-not-allowed disabled:bg-navy-50"
+                  className="h-12 rounded-xl border border-border bg-white px-4 text-center text-base font-black tracking-[0.3em] text-navy-900 shadow-soft outline-none transition-all duration-200 placeholder:text-navy-300 focus:border-telefya-blue focus:ring-2 focus:ring-telefya-blue/15 disabled:cursor-not-allowed disabled:bg-navy-50 sm:text-lg sm:tracking-[0.35em]"
                 />
               </label>
 

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   ArrowRight,
   Building2,
@@ -44,30 +45,42 @@ const solutions = [
     desc: "HIPAA-ready meetings for telehealth, consultations and care teams.",
     icon: HeartPulse,
     color: "text-telefya-purple",
+    href: "/solutions/healthcare",
   },
   {
     title: "Education",
     desc: "Virtual classrooms, tutoring and faculty collaboration made simple.",
     icon: GraduationCap,
     color: "text-telefya-green",
+    href: "/solutions/education",
   },
   {
     title: "Enterprise",
     desc: "Secure meetings, webinars and collaboration for modern teams.",
     icon: Building2,
     color: "text-telefya-gold",
+    href: "/solutions/enterprise",
   },
   {
     title: "Government",
     desc: "Compliant communications for agencies and public services.",
     icon: Landmark,
     color: "text-telefya-blue",
+    href: "/solutions/government",
   },
   {
     title: "Retail & E-commerce",
     desc: "Connect with your customers and teams, anywhere.",
     icon: ShoppingCart,
     color: "text-telefya-purple",
+    href: "/solutions/retail-ecommerce",
+  },
+  {
+    title: "Communities",
+    desc: "Bring members, organizers and events into one shared space.",
+    icon: Users,
+    color: "text-telefya-green",
+    href: "/solutions/communities",
   },
 ];
 
@@ -123,10 +136,11 @@ export function FeatureSection() {
             </p>
           </div>
 
-          <div className="telefya-horizontal-scroll flex snap-x snap-mandatory gap-px overflow-x-auto rounded-2xl bg-border pb-4 md:grid md:grid-cols-2 md:overflow-visible md:pb-0 lg:grid-cols-5">
+          <div className="telefya-horizontal-scroll flex snap-x snap-mandatory gap-px overflow-x-auto rounded-2xl bg-border pb-4 md:grid md:grid-cols-2 md:overflow-visible md:pb-0 lg:grid-cols-3">
             {solutions.map((item) => (
-              <article
+              <Link
                 key={item.title}
+                href={item.href}
                 className="group flex min-h-[290px] min-w-[82vw] snap-start flex-col bg-white p-6 transition-all duration-300 hover:bg-navy-50 sm:min-w-[330px] md:min-w-0 md:p-7"
               >
                 <div className="grid h-10 w-10 place-items-center rounded-md bg-navy-50 transition-transform duration-300 group-hover:scale-110">
@@ -139,17 +153,14 @@ export function FeatureSection() {
                   {item.desc}
                 </p>
 
-                <a
-                  href="#"
-                  className="mt-5 inline-flex items-center gap-1.5 text-sm font-bold text-telefya-blue"
-                >
+                <span className="mt-5 inline-flex items-center gap-1.5 text-sm font-bold text-telefya-blue">
                   Learn more
                   <ArrowRight
                     size={13}
                     className="transition-transform duration-300 group-hover:translate-x-1"
                   />
-                </a>
-              </article>
+                </span>
+              </Link>
             ))}
           </div>
 

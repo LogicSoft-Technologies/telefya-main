@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const BACKEND_API_URL =
-  process.env.BACKEND_API_URL ?? "https://meet.bornwithwealth.com/api/v2";
+const BACKEND_API_URL = process.env.BACKEND_API_URL;
+
+if (!BACKEND_API_URL) {
+  throw new Error(
+    "BACKEND_API_URL is not set. Add it to .env.local (e.g. http://localhost:5000/api/v2).",
+  );
+}
 
 type RouteContext = {
   params: Promise<{

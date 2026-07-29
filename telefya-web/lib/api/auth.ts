@@ -1,3 +1,4 @@
+// lib / api / auth.ts
 import { apiRequest } from "@/lib/api/client";
 
 export type AuthUser = {

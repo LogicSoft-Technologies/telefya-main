@@ -12,10 +12,17 @@ const RECORDINGS_DIR = process.env.RECORDINGS_DIR
   : path.join(process.cwd(), "recordings");
 
 const RECORDER_BOT_SECRET =
-  process.env.RECORDER_BOT_SECRET || "dev_recorder_secret";
+  process.env.RECORDER_BOT_SECRET;
 
 async function ensureDir(dir) {
   await fsp.mkdir(dir, { recursive: true });
+}
+
+function isSafeRecordingId(recordingId) {
+  return (
+    typeof recordingId === "string" &&
+    /^[a-zA-Z0-9_-]{8,128}$/.test(recordingId)
+  );
 }
 
 function verifyRecorderSecret(req) {
@@ -123,6 +130,15 @@ async function upload_recording_blob_controller(req, res) {
     }
 
     const recordingId = req.params.recordingId;
+
+    if (!isSafeRecordingId(recordingId)) {
+  return res.status(400).json({
+    success: false,
+    error: true,
+    message: "Invalid recording ID.",
+    status: 400,
+  });
+}
 
     if (!recordingId) {
       return res.status(400).json({

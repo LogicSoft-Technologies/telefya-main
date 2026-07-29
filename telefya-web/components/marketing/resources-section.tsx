@@ -12,94 +12,90 @@ import {
 const resources = [
   {
     title: "API Documentation",
-    desc: "Connect your product to Telefya meetings, rooms, and user workflows.",
+    desc: "Integrate Telefya meetings, rooms, and user workflows into your product.",
     icon: Code2,
-    href: "#",
+    href: "/resources/api-docs",
   },
   {
     title: "Security Center",
-    desc: "Learn how Telefya protects meetings, accounts, and organizations.",
+    desc: "Review how Telefya protects accounts, sessions, and organizational data.",
     icon: ShieldCheck,
-    href: "#",
+    href: "/resources/security",
   },
   {
     title: "Help Center",
-    desc: "Guides for hosts, speakers, admins, and attendees.",
+    desc: "Reference guides for hosts, administrators, and attendees.",
     icon: Headphones,
-    href: "#",
+    href: "/resources/help-center",
   },
   {
     title: "Video Tutorials",
-    desc: "Watch product walkthroughs for live sessions and events.",
+    desc: "Product walkthroughs covering setup, live sessions, and events.",
     icon: Video,
-    href: "#",
+    href: "/resources/tutorials",
   },
   {
     title: "Implementation Guides",
-    desc: "Step-by-step setup for teams, platforms, and developers.",
+    desc: "Structured rollout guidance for teams, platforms, and developers.",
     icon: BookOpen,
-    href: "#",
+    href: "/resources/implementation-guides",
   },
   {
     title: "Release Notes",
-    desc: "Follow product updates, fixes, and platform improvements.",
+    desc: "A record of product updates, fixes, and platform improvements.",
     icon: FileText,
-    href: "#",
+    href: "/resources/release-notes",
   },
 ];
 
 export function ResourcesSection() {
   return (
-    <section id="resources" className="overflow-hidden bg-navy-50 py-14 sm:py-20">
+    <section id="resources" className="bg-navy-50 py-16 sm:py-24">
       <div className="mx-auto max-w-[92rem] px-5 lg:px-8">
-        <div className="mb-8 flex flex-col justify-between gap-5 sm:mb-10 lg:flex-row lg:items-end">
+        <div className="mb-10 flex flex-col justify-between gap-5 sm:mb-12 lg:flex-row lg:items-end">
           <div>
-            <span className="inline-flex rounded-full bg-white px-4 py-2 text-sm font-bold text-telefya-violet shadow-soft">
+            <span className="inline-flex rounded-full bg-white px-4 py-2 text-xs font-black uppercase tracking-[0.14em] text-telefya-violet shadow-soft">
               Resources
             </span>
 
-            <h2 className="mt-5 max-w-2xl text-[clamp(2rem,8vw,2.5rem)] font-black leading-tight text-navy-900">
-              Everything your team needs to build, launch, and support Telefya.
+            <h2 className="mt-5 max-w-2xl text-[clamp(2rem,6vw,2.75rem)] font-black leading-[1.1] tracking-tight text-navy-900">
+              Documentation and support for every stage of implementation.
             </h2>
           </div>
 
           <p className="max-w-xl leading-7 text-navy-500">
-            Explore docs, guides, security details, and support resources built
-            for product teams and enterprise operators.
+            Reference material, security documentation, and support
+            resources for product teams and enterprise operators.
           </p>
         </div>
 
-        <div className="telefya-horizontal-scroll flex snap-x snap-mandatory gap-4 overflow-x-auto pb-4 md:grid md:grid-cols-2 md:gap-5 md:overflow-visible md:pb-0 xl:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {resources.map((item) => (
             <Link
               key={item.title}
               href={item.href}
-              className="group min-w-[84vw] snap-start rounded-2xl border border-border bg-white p-5 shadow-soft transition-all duration-300 hover:-translate-y-1 hover:border-telefya-blue hover:shadow-enterprise sm:min-w-[360px] sm:p-6 md:min-w-0"
+              className="group rounded-xl border border-border bg-white p-6 shadow-soft transition-all duration-200 hover:border-telefya-blue/30 hover:shadow-enterprise"
             >
-              <div className="grid h-12 w-12 place-items-center rounded-xl bg-blue-50 text-telefya-blue transition-transform duration-300 group-hover:scale-110 group-hover:bg-telefya-blue group-hover:text-white">
-                <item.icon size={24} />
-              </div>
+              <span className="grid h-11 w-11 place-items-center rounded-xl bg-blue-50 text-telefya-blue transition-colors duration-200 group-hover:bg-telefya-blue group-hover:text-white">
+                <item.icon size={20} />
+              </span>
 
-              <h3 className="mt-6 text-xl font-black text-navy-900">
-                {item.title}
-              </h3>
+              <h3 className="mt-5 font-black text-navy-900">{item.title}</h3>
 
-              <p className="mt-3 leading-7 text-navy-500">{item.desc}</p>
+              <p className="mt-2 text-sm font-semibold leading-6 text-navy-500">
+                {item.desc}
+              </p>
 
-              <span className="mt-5 inline-flex items-center gap-2 text-sm font-black text-telefya-blue">
+              <span className="mt-5 inline-flex items-center gap-1.5 text-sm font-black text-telefya-blue">
                 View resource
                 <ArrowRight
-                  size={16}
-                  className="transition-transform duration-300 group-hover:translate-x-1"
+                  size={14}
+                  className="transition-transform duration-200 group-hover:translate-x-1"
                 />
               </span>
             </Link>
           ))}
         </div>
-
-        <p className="mt-2 text-xs font-semibold text-navy-400 md:hidden">
-          Swipe to explore resources
-        </p>
       </div>
     </section>
   );

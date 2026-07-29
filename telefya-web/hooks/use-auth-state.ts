@@ -24,7 +24,7 @@ export function useAuthState() {
 
     function handleStorage() {
       syncAuthState();
-    }
+    } 
 
     window.addEventListener("storage", handleStorage);
     window.addEventListener("telefya-auth-change", handleStorage);

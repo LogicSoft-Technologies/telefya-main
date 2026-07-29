@@ -59,7 +59,7 @@ export function MarketingFooter() {
         <div className="grid gap-10 border-b border-white/10 pb-12 lg:grid-cols-[1.3fr_0.7fr]">
           <div>
             <Link href="/" className="inline-block">
-              <div className="inline-flex items-center rounded-md bg-white px-3 py-2">
+              <div className="inline-flex items-center">
                 <Image
                   src="/images/telefya-logo.png"
                   alt="Telefya"

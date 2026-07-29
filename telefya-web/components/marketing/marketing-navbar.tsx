@@ -86,12 +86,16 @@ const productItems = [
 ];
 
 const solutionItems = [
-  { title: "Healthcare", icon: HeartPulse, href: "#solutions" },
-  { title: "Education", icon: GraduationCap, href: "#solutions" },
-  { title: "Enterprise", icon: Building2, href: "#solutions" },
-  { title: "Government", icon: Landmark, href: "#solutions" },
-  { title: "Retail & E-commerce", icon: ShoppingCart, href: "#solutions" },
-  { title: "Communities", icon: Users, href: "#solutions" },
+  { title: "Healthcare", icon: HeartPulse, href: "/solutions/healthcare" },
+  { title: "Education", icon: GraduationCap, href: "/solutions/education" },
+  { title: "Enterprise", icon: Building2, href: "/solutions/enterprise" },
+  { title: "Government", icon: Landmark, href: "/solutions/government" },
+  {
+    title: "Retail & E-commerce",
+    icon: ShoppingCart,
+    href: "/solutions/retail-ecommerce",
+  },
+  { title: "Communities", icon: Users, href: "/solutions/communities" },
 ];
 
 const resourceItems = [
@@ -262,7 +266,7 @@ export function MarketingNavbar() {
 
   function navButtonClass(key: MenuKey) {
     return [
-      "inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold transition",
+      "telefya-interactive telefya-focus-ring inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold",
       openMenu === key
         ? "bg-blue-50 text-telefya-blue"
         : "text-navy-600 hover:bg-navy-50 hover:text-navy-900",
@@ -275,7 +279,7 @@ export function MarketingNavbar() {
         ref={navRef}
         className="relative mx-auto flex h-[68px] max-w-[96rem] items-center justify-between gap-3 px-4 sm:gap-6 sm:px-5 lg:px-8"
       >
-        <Link href="/" className="shrink-0">
+        <Link href="/" className="telefya-interactive telefya-focus-ring shrink-0 rounded-lg">
           <Image
             src="/images/telefya-logo.png"
             alt="Telefya"
@@ -296,8 +300,8 @@ export function MarketingNavbar() {
               size={14}
               className={
                 openMenu === "product"
-                  ? "rotate-180 transition-transform"
-                  : "transition-transform"
+                  ? "rotate-180 transition-transform duration-200"
+                  : "transition-transform duration-200"
               }
             />
           </button>
@@ -311,15 +315,15 @@ export function MarketingNavbar() {
               size={14}
               className={
                 openMenu === "solutions"
-                  ? "rotate-180 transition-transform"
-                  : "transition-transform"
+                  ? "rotate-180 transition-transform duration-200"
+                  : "transition-transform duration-200"
               }
             />
           </button>
 
           <Link
             href="#pricing"
-            className="rounded-xl px-3 py-2 text-sm font-semibold text-navy-600 hover:bg-navy-50 hover:text-navy-900"
+            className="telefya-interactive telefya-focus-ring rounded-xl px-3 py-2 text-sm font-semibold text-navy-600 hover:bg-navy-50 hover:text-navy-900"
           >
             Pricing
           </Link>
@@ -333,28 +337,28 @@ export function MarketingNavbar() {
               size={14}
               className={
                 openMenu === "resources"
-                  ? "rotate-180 transition-transform"
-                  : "transition-transform"
+                  ? "rotate-180 transition-transform duration-200"
+                  : "transition-transform duration-200"
               }
             />
           </button>
 
           <Link
             href="#company"
-            className="rounded-xl px-3 py-2 text-sm font-semibold text-navy-600 hover:bg-navy-50 hover:text-navy-900"
+            className="telefya-interactive telefya-focus-ring rounded-xl px-3 py-2 text-sm font-semibold text-navy-600 hover:bg-navy-50 hover:text-navy-900"
           >
             Company
           </Link>
         </div>
 
         <div className="hidden items-center gap-2 lg:flex">
-          <button className="grid h-10 w-10 place-items-center rounded-xl text-navy-500 hover:bg-navy-50 hover:text-telefya-blue">
+          <button className="telefya-interactive telefya-focus-ring grid h-10 w-10 place-items-center rounded-xl text-navy-500 hover:bg-navy-50 hover:text-telefya-blue">
             <Search size={17} />
           </button>
 
           <Link
             href="/contact-sales"
-            className="rounded-xl px-3 py-2 text-sm font-semibold text-navy-700 hover:bg-navy-50"
+            className="telefya-interactive telefya-focus-ring rounded-xl px-3 py-2 text-sm font-semibold text-navy-700 hover:bg-navy-50"
           >
             Contact Sales
           </Link>
@@ -363,13 +367,13 @@ export function MarketingNavbar() {
             <>
               <Link
                 href="/lobby"
-                className="inline-flex h-10 items-center gap-2 rounded-xl bg-telefya-blue px-4 text-sm font-semibold text-white shadow-soft hover:bg-telefya-violet"
+                className="telefya-interactive telefya-lift telefya-press telefya-focus-ring inline-flex h-10 items-center gap-2 rounded-xl bg-telefya-blue px-4 text-sm font-semibold text-white shadow-soft hover:bg-telefya-violet"
               >
                 <LayoutDashboard size={16} />
                 Workspace
               </Link>
 
-              <div className="hidden items-center gap-2 rounded-xl border border-border bg-white px-2 py-1 shadow-soft xl:flex">
+              <div className="telefya-interactive hidden items-center gap-2 rounded-xl border border-border bg-white px-2 py-1 shadow-soft hover:shadow-enterprise xl:flex">
                 <div className="telefya-gradient grid h-8 w-8 overflow-hidden rounded-lg text-xs font-semibold text-white">
                   {profileImageUrl ? (
                     <img
@@ -391,7 +395,7 @@ export function MarketingNavbar() {
 
               <button
                 onClick={handleLogout}
-                className="grid h-10 w-10 place-items-center rounded-xl border border-border text-navy-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                className="telefya-interactive telefya-press telefya-focus-ring grid h-10 w-10 place-items-center rounded-xl border border-border text-navy-500 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
                 title="Log out"
               >
                 <LogOut size={16} />
@@ -401,13 +405,13 @@ export function MarketingNavbar() {
             <>
               <Link
                 href="/login"
-                className="rounded-xl px-3 py-2 text-sm font-semibold text-navy-700 hover:bg-navy-50 hover:text-navy-900"
+                className="telefya-interactive telefya-focus-ring rounded-xl px-3 py-2 text-sm font-semibold text-navy-700 hover:bg-navy-50 hover:text-navy-900"
               >
                 Sign in
               </Link>
               <Link
                 href="/register"
-                className="rounded-xl bg-telefya-blue px-4 py-2.5 text-sm font-semibold text-white shadow-soft hover:bg-telefya-violet"
+                className="telefya-interactive telefya-lift telefya-press telefya-focus-ring rounded-xl bg-telefya-blue px-4 py-2.5 text-sm font-semibold text-white shadow-soft hover:bg-telefya-violet"
               >
                 Start free
               </Link>
@@ -417,7 +421,7 @@ export function MarketingNavbar() {
           <button
             onClick={() => toggle("apps")}
             className={[
-              "grid h-10 w-10 place-items-center rounded-xl transition",
+              "telefya-interactive telefya-press telefya-focus-ring grid h-10 w-10 place-items-center rounded-xl",
               openMenu === "apps"
                 ? "bg-telefya-blue text-white"
                 : "bg-navy-50 text-navy-700 hover:bg-navy-100",
@@ -431,7 +435,7 @@ export function MarketingNavbar() {
           <Link
             href={authed ? "/lobby" : "/login"}
             onClick={closeMobileMenu}
-            className="inline-flex h-10 items-center rounded-xl bg-telefya-blue px-3.5 text-sm font-semibold text-white shadow-soft sm:px-4"
+            className="telefya-interactive telefya-press telefya-focus-ring inline-flex h-10 items-center rounded-xl bg-telefya-blue px-3.5 text-sm font-semibold text-white shadow-soft sm:px-4"
           >
             {authed ? "Workspace" : "Sign in"}
           </Link>
@@ -441,7 +445,7 @@ export function MarketingNavbar() {
             aria-label={mobileOpen ? "Close menu" : "Open menu"}
             aria-expanded={mobileOpen}
             className={[
-              "grid h-10 w-10 shrink-0 place-items-center rounded-xl border transition",
+              "telefya-interactive telefya-press telefya-focus-ring grid h-10 w-10 shrink-0 place-items-center rounded-xl border",
               mobileOpen
                 ? "border-telefya-blue bg-blue-50 text-telefya-blue"
                 : "border-border text-navy-700 hover:bg-navy-50",
@@ -452,7 +456,7 @@ export function MarketingNavbar() {
         </div>
 
         {openMenu === "product" ? (
-          <div className="absolute left-1/2 top-full hidden w-[680px] -translate-x-1/2 overflow-hidden rounded-b-xl border border-t-0 border-border bg-white shadow-enterprise lg:block">
+          <div className="telefya-in-fade-up absolute left-1/2 top-full hidden w-[680px] -translate-x-1/2 overflow-hidden rounded-b-xl border border-t-0 border-border bg-white shadow-enterprise lg:block">
             <div className="telefya-accent-line h-1" />
             <div className="grid grid-cols-2">
               {productItems.map((item, index) => (
@@ -461,7 +465,8 @@ export function MarketingNavbar() {
                   href={item.href}
                   onClick={() => setOpenMenu(null)}
                   className={[
-                    "flex gap-4 p-5 hover:bg-navy-50",
+                    "telefya-in-fade-up telefya-interactive flex gap-4 p-5 hover:bg-navy-50",
+                    `telefya-stagger-${index + 1}`,
                     index % 2 === 0 ? "border-r border-border" : "",
                     index < productItems.length - 2
                       ? "border-b border-border"
@@ -486,7 +491,7 @@ export function MarketingNavbar() {
         ) : null}
 
         {openMenu === "solutions" ? (
-          <div className="absolute left-1/2 top-full hidden w-[760px] -translate-x-1/2 overflow-hidden rounded-b-xl border border-t-0 border-border bg-white shadow-enterprise lg:block">
+          <div className="telefya-in-fade-up absolute left-1/2 top-full hidden w-[760px] -translate-x-1/2 overflow-hidden rounded-b-xl border border-t-0 border-border bg-white shadow-enterprise lg:block">
             <div className="telefya-accent-line h-1" />
             <div className="grid grid-cols-3">
               {solutionItems.map((item, index) => (
@@ -495,7 +500,8 @@ export function MarketingNavbar() {
                   href={item.href}
                   onClick={() => setOpenMenu(null)}
                   className={[
-                    "flex items-center gap-3 p-5 hover:bg-navy-50",
+                    "telefya-in-fade-up telefya-interactive flex items-center gap-3 p-5 hover:bg-navy-50",
+                    `telefya-stagger-${index + 1}`,
                     index % 3 !== 2 ? "border-r border-border" : "",
                     index < 3 ? "border-b border-border" : "",
                   ].join(" ")}
@@ -513,7 +519,7 @@ export function MarketingNavbar() {
         ) : null}
 
         {openMenu === "resources" ? (
-          <div className="absolute left-1/2 top-full hidden w-[520px] -translate-x-1/2 overflow-hidden rounded-b-xl border border-t-0 border-border bg-white shadow-enterprise lg:block">
+          <div className="telefya-in-fade-up absolute left-1/2 top-full hidden w-[520px] -translate-x-1/2 overflow-hidden rounded-b-xl border border-t-0 border-border bg-white shadow-enterprise lg:block">
             <div className="telefya-accent-line h-1" />
             {resourceItems.map((item, index) => (
               <Link
@@ -521,7 +527,8 @@ export function MarketingNavbar() {
                 href={item.href}
                 onClick={() => setOpenMenu(null)}
                 className={[
-                  "flex gap-4 p-5 hover:bg-navy-50",
+                  "telefya-in-fade-up telefya-interactive flex gap-4 p-5 hover:bg-navy-50",
+                  `telefya-stagger-${index + 1}`,
                   index < resourceItems.length - 1
                     ? "border-b border-border"
                     : "",
@@ -544,7 +551,7 @@ export function MarketingNavbar() {
         ) : null}
 
         {openMenu === "apps" ? (
-          <div className="absolute right-0 top-full hidden w-[370px] overflow-hidden rounded-b-xl border border-t-0 border-border bg-white shadow-enterprise lg:block">
+          <div className="telefya-in-fade-up absolute right-0 top-full hidden w-[370px] overflow-hidden rounded-b-xl border border-t-0 border-border bg-white shadow-enterprise lg:block">
             <div className="bg-navy-900">
               <div className="telefya-accent-line h-1" />
               <div className="px-5 py-4">
@@ -555,7 +562,7 @@ export function MarketingNavbar() {
                   <Link
                     href={authed ? "/lobby" : "/register"}
                     onClick={() => setOpenMenu(null)}
-                    className="text-xs font-semibold text-telefya-green"
+                    className="telefya-interactive text-xs font-semibold text-telefya-green hover:opacity-80"
                   >
                     View all -&gt;
                   </Link>
@@ -579,7 +586,8 @@ export function MarketingNavbar() {
                   href={href}
                   onClick={() => setOpenMenu(null)}
                   className={[
-                    "flex flex-col items-center gap-2 py-5 text-xs font-semibold text-navy-700 hover:bg-navy-50",
+                    "telefya-in-scale telefya-interactive flex flex-col items-center gap-2 py-5 text-xs font-semibold text-navy-700 hover:bg-navy-50",
+                    `telefya-stagger-${index + 1}`,
                     index % 3 !== 2 ? "border-r border-border" : "",
                     index < 3 ? "border-b border-border" : "",
                   ].join(" ")}
@@ -594,7 +602,7 @@ export function MarketingNavbar() {
               <Link
                 href={authed ? "/lobby" : "/contact-sales"}
                 onClick={() => setOpenMenu(null)}
-                className="flex h-11 items-center justify-center rounded-xl bg-telefya-blue text-sm font-semibold text-white shadow-soft hover:bg-telefya-violet"
+                className="telefya-interactive telefya-lift telefya-press flex h-11 items-center justify-center rounded-xl bg-telefya-blue text-sm font-semibold text-white shadow-soft hover:bg-telefya-violet"
               >
                 {authed ? "Open workspace" : "Contact Sales"}
               </Link>
@@ -603,7 +611,7 @@ export function MarketingNavbar() {
         ) : null}
 
         {mobileOpen ? (
-          <div className="absolute inset-x-0 top-full z-40 max-h-[calc(100vh-68px)] overflow-y-auto border-t border-border bg-white shadow-enterprise lg:hidden">
+          <div className="telefya-in-fade absolute inset-x-0 top-full z-40 max-h-[calc(100vh-68px)] overflow-y-auto border-t border-border bg-white shadow-enterprise lg:hidden">
             <div className="telefya-accent-line h-1" />
 
             <div className="grid gap-1 p-4">
@@ -618,7 +626,7 @@ export function MarketingNavbar() {
                       key={item.title}
                       href={item.href}
                       onClick={closeMobileMenu}
-                      className="flex items-center gap-3 rounded-lg p-2.5 hover:bg-navy-50"
+                      className="telefya-interactive flex items-center gap-3 rounded-lg p-2.5 hover:bg-navy-50"
                     >
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-telefya-blue">
                         <item.icon size={16} />
@@ -647,7 +655,7 @@ export function MarketingNavbar() {
                       key={item.title}
                       href={item.href}
                       onClick={closeMobileMenu}
-                      className="flex items-center gap-2.5 rounded-lg p-2.5 hover:bg-navy-50"
+                      className="telefya-interactive flex items-center gap-2.5 rounded-lg p-2.5 hover:bg-navy-50"
                     >
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-telefya-blue">
                         <item.icon size={16} />
@@ -663,7 +671,7 @@ export function MarketingNavbar() {
               <Link
                 href="#pricing"
                 onClick={closeMobileMenu}
-                className="rounded-lg px-2.5 py-3 text-sm font-semibold text-navy-700 hover:bg-navy-50"
+                className="telefya-interactive rounded-lg px-2.5 py-3 text-sm font-semibold text-navy-700 hover:bg-navy-50"
               >
                 Pricing
               </Link>
@@ -679,7 +687,7 @@ export function MarketingNavbar() {
                       key={item.title}
                       href={item.href}
                       onClick={closeMobileMenu}
-                      className="flex items-center gap-3 rounded-lg p-2.5 hover:bg-navy-50"
+                      className="telefya-interactive flex items-center gap-3 rounded-lg p-2.5 hover:bg-navy-50"
                     >
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-telefya-blue">
                         <item.icon size={16} />
@@ -700,7 +708,7 @@ export function MarketingNavbar() {
               <Link
                 href="#company"
                 onClick={closeMobileMenu}
-                className="rounded-lg px-2.5 py-3 text-sm font-semibold text-navy-700 hover:bg-navy-50"
+                className="telefya-interactive rounded-lg px-2.5 py-3 text-sm font-semibold text-navy-700 hover:bg-navy-50"
               >
                 Company
               </Link>
@@ -708,7 +716,7 @@ export function MarketingNavbar() {
               <Link
                 href="/contact-sales"
                 onClick={closeMobileMenu}
-                className="rounded-lg px-2.5 py-3 text-sm font-semibold text-navy-700 hover:bg-navy-50"
+                className="telefya-interactive rounded-lg px-2.5 py-3 text-sm font-semibold text-navy-700 hover:bg-navy-50"
               >
                 Contact Sales
               </Link>
@@ -739,7 +747,7 @@ export function MarketingNavbar() {
                   <Link
                     href="/lobby"
                     onClick={closeMobileMenu}
-                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-telefya-blue text-sm font-semibold text-white shadow-soft hover:bg-telefya-violet"
+                    className="telefya-interactive telefya-press inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-telefya-blue text-sm font-semibold text-white shadow-soft hover:bg-telefya-violet"
                   >
                     <LayoutDashboard size={16} />
                     Workspace
@@ -747,7 +755,7 @@ export function MarketingNavbar() {
 
                   <button
                     onClick={handleLogout}
-                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-border text-sm font-semibold text-navy-700 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                    className="telefya-interactive telefya-press inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-border text-sm font-semibold text-navy-700 hover:border-red-200 hover:bg-red-50 hover:text-red-600"
                   >
                     <LogOut size={16} />
                     Log out
@@ -758,14 +766,14 @@ export function MarketingNavbar() {
                   <Link
                     href="/login"
                     onClick={closeMobileMenu}
-                    className="inline-flex h-11 items-center justify-center rounded-xl border border-border text-sm font-semibold text-navy-700 hover:bg-navy-50"
+                    className="telefya-interactive telefya-press inline-flex h-11 items-center justify-center rounded-xl border border-border text-sm font-semibold text-navy-700 hover:bg-navy-50"
                   >
                     Sign in
                   </Link>
                   <Link
                     href="/register"
                     onClick={closeMobileMenu}
-                    className="inline-flex h-11 items-center justify-center rounded-xl bg-telefya-blue text-sm font-semibold text-white shadow-soft hover:bg-telefya-violet"
+                    className="telefya-interactive telefya-press inline-flex h-11 items-center justify-center rounded-xl bg-telefya-blue text-sm font-semibold text-white shadow-soft hover:bg-telefya-violet"
                   >
                     Start free
                   </Link>
@@ -795,18 +803,18 @@ function MobileAccordion({
       <button
         onClick={onToggle}
         className={[
-          "flex w-full items-center justify-between rounded-lg px-2.5 py-3 text-sm font-semibold transition",
+          "telefya-interactive flex w-full items-center justify-between rounded-lg px-2.5 py-3 text-sm font-semibold",
           open ? "text-telefya-blue" : "text-navy-700 hover:bg-navy-50",
         ].join(" ")}
       >
         {label}
         <ChevronDown
           size={16}
-          className={open ? "rotate-180 transition-transform" : "transition-transform"}
+          className={open ? "rotate-180 transition-transform duration-200" : "transition-transform duration-200"}
         />
       </button>
 
-      {open ? children : null}
+      {open ? <div className="telefya-in-fade-up">{children}</div> : null}
     </div>
   );
 }

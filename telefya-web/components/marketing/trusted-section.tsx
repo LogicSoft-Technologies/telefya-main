@@ -1,10 +1,10 @@
 const companies = [
-  "Cleveland Clinic",
-  "UNICEF",
-  "Deloitte",
-  "Harvard University",
-  "Shopify",
-  "World Bank",
+  "Health Care",
+  "Enterprise",
+  "Government",
+  "Retail & E-Commerce",
+  "Communities",
+  "Education",
 ];
 
 export function TrustedSection() {
@@ -12,7 +12,7 @@ export function TrustedSection() {
     <section className="overflow-hidden bg-white pb-14 sm:pb-16">
       <div className="mx-auto max-w-[92rem] px-5 text-center lg:px-8">
         <p className="font-bold text-navy-500">
-          Trusted by teams around the world
+          Trusted by Experts from various professions around the world
         </p>
       </div>
 

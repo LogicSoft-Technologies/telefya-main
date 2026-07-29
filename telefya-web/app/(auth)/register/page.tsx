@@ -95,14 +95,15 @@ export default function Register() {
   }
 
   return (
-    <main className="min-h-screen bg-white lg:flex">
-      <aside className="hidden shrink-0 flex-col justify-between overflow-hidden bg-navy-900 lg:sticky lg:top-0 lg:flex lg:h-screen lg:w-[460px] xl:w-[520px]">
-        <div className="telefya-accent-line h-1" />
+    <main className="min-h-screen bg-white lg:grid lg:h-dvh lg:grid-cols-[440px_minmax(0,1fr)] xl:grid-cols-[480px_minmax(0,1fr)]">
+      {/* LEFT — desktop/tablet only, pinned, never scrolls */}
+      <aside className="hidden shrink-0 flex-col overflow-hidden bg-navy-900 lg:flex lg:h-dvh">
+        <div className="telefya-accent-line h-1 shrink-0" />
 
-        <div className="flex flex-1 flex-col justify-between px-8 py-10 xl:px-10">
+        <div className="flex flex-1 flex-col justify-between overflow-y-auto px-8 py-10 xl:px-10">
           <Link
             href="/"
-            className="inline-flex w-fit rounded-xl bg-white px-4 py-3 shadow-soft transition-all duration-200 hover:shadow-enterprise"
+            className="inline-flex w-fit rounded-xl px-4 py-3 shadow-soft transition-all duration-200 hover:shadow-enterprise"
           >
             <Image
               src="/images/telefya-logo.png"
@@ -121,11 +122,11 @@ export default function Register() {
                 Secure onboarding
               </div>
 
-              <h1 className="mt-5 max-w-md text-4xl font-black leading-tight text-white">
+              <h1 className="mt-5 max-w-md font-heading text-4xl font-black leading-tight text-white">
                 Create your secure Telefya workspace.
               </h1>
 
-              <p className="mt-4 max-w-md text-base leading-8 text-white/62">
+              <p className="mt-4 max-w-md font-body text-base leading-8 text-white/62">
                 Register your profile, verify your email, and start managing
                 meetings, speakers, attendees, and live sessions.
               </p>
@@ -134,36 +135,53 @@ export default function Register() {
             <MeetingPreview />
           </div>
 
-          <p className="text-sm font-semibold leading-6 text-white/45">
+          <p className="font-body text-sm font-semibold leading-6 text-white/45">
             Enterprise meetings, live events, and organization controls in one
             workspace.
           </p>
         </div>
       </aside>
 
-      <section className="telefya-aurora flex min-h-screen w-full flex-1 justify-center overflow-y-auto px-6 py-10 sm:px-10 lg:px-14">
+      {/* RIGHT — the only scrollable region on large screens; full page on mobile */}
+      <section className="telefya-aurora flex justify-center px-5 py-8 sm:px-10 sm:py-10 lg:h-dvh lg:overflow-y-auto lg:px-14 lg:py-14">
         <div className="w-full max-w-2xl">
-          <div className="mb-8 lg:hidden">
-            <Image
-              src="/images/telefya-logo.png"
-              alt="Telefya"
-              width={146}
-              height={44}
-              priority
-              className="h-9 w-auto"
-            />
+          {/* Mobile-only condensed hero — replaces the hidden aside's message instead of dropping it */}
+          <div className="lg:hidden">
+            <div className="flex items-center justify-between">
+              <Image
+                src="/images/telefya-logo.png"
+                alt="Telefya"
+                width={140}
+                height={42}
+                priority
+                className="h-8 w-auto"
+              />
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.12em] text-telefya-green">
+                <ShieldCheck size={12} />
+                Secure
+              </span>
+            </div>
+
+            <h1 className="mt-6 font-heading text-[26px] font-black leading-tight text-navy-900 sm:text-3xl">
+              Create your secure Telefya workspace.
+            </h1>
+
+            <p className="mt-3 font-body text-sm font-semibold leading-6 text-navy-500 sm:text-base">
+              Register your profile, verify your email, and start managing
+              meetings, speakers, and live sessions.
+            </p>
           </div>
 
-          <div className="rounded-xl border border-border bg-white/95 p-6 shadow-enterprise backdrop-blur">
+          <div className="mt-6 rounded-xl border border-border bg-white/95 p-5 shadow-enterprise backdrop-blur sm:p-6 lg:mt-0 lg:p-8">
             <span className="inline-flex rounded-full bg-blue-50 px-4 py-2 text-xs font-black uppercase tracking-[0.14em] text-telefya-blue">
               Start for free
             </span>
 
-            <h2 className="mt-5 text-3xl font-black text-navy-900">
+            <h2 className="mt-5 font-heading text-2xl font-black text-navy-900 sm:text-3xl">
               Create your account
             </h2>
 
-            <p className="mt-2 leading-7 text-navy-500">
+            <p className="mt-2 font-body leading-7 text-navy-500">
               Enter your details exactly as required for your Telefya profile.
             </p>
 

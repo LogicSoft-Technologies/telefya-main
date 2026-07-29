@@ -43,6 +43,12 @@ type ParticipantMeta = {
   cameraOn?: boolean;
 };
 
+const LOGICAL_WIDTH = 1280;
+const LOGICAL_HEIGHT = 720;
+const RENDER_WIDTH = 1920;
+const RENDER_HEIGHT = 1080;
+const RENDER_SCALE = RENDER_WIDTH / LOGICAL_WIDTH;
+
 function roundRect(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -80,6 +86,31 @@ function normalizeParticipants(value: unknown): ParticipantMeta[] {
   return [];
 }
 
+function truncateToWidth(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+) {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+
+  let low = 0;
+  let high = text.length;
+
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    const candidate = `${text.slice(0, mid)}…`;
+
+    if (ctx.measureText(candidate).width <= maxWidth) {
+      low = mid;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return low > 0 ? `${text.slice(0, low)}…` : "…";
+}
+
+
 function drawCover(
   ctx: CanvasRenderingContext2D,
   video: HTMLVideoElement,
@@ -109,7 +140,122 @@ function drawCover(
   ctx.drawImage(video, sx, sy, sw, sh, x, y, width, height);
 }
 
-function drawTile(
+function drawContain(
+  ctx: CanvasRenderingContext2D,
+  video: HTMLVideoElement,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  const sourceWidth = video.videoWidth || 16;
+  const sourceHeight = video.videoHeight || 9;
+  const scale = Math.min(width / sourceWidth, height / sourceHeight);
+
+  const drawWidth = sourceWidth * scale;
+  const drawHeight = sourceHeight * scale;
+  const dx = x + (width - drawWidth) / 2;
+  const dy = y + (height - drawHeight) / 2;
+
+  ctx.drawImage(video, dx, dy, drawWidth, drawHeight);
+}
+
+function drawAvatarFallback(
+  ctx: CanvasRenderingContext2D,
+  name: string,
+  caption: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  ctx.fillStyle = "#071832";
+  ctx.fillRect(x, y, width, height);
+
+  const avatarSize = Math.min(width, height) * 0.22;
+  const cx = x + width / 2;
+  const cy = y + height / 2 - 18;
+
+  const gradient = ctx.createLinearGradient(
+    cx - avatarSize,
+    cy - avatarSize,
+    cx + avatarSize,
+    cy + avatarSize,
+  );
+  gradient.addColorStop(0, "#0f6bff");
+  gradient.addColorStop(0.55, "#6426ff");
+  gradient.addColorStop(1, "#10d98f");
+
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(cx, cy, avatarSize, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = `800 ${Math.max(22, avatarSize * 0.72)}px Arial`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(getInitials(name), cx, cy);
+
+  ctx.font = "800 20px Arial";
+  ctx.fillText(truncateToWidth(ctx, name, width - 48), cx, cy + avatarSize + 34);
+
+  ctx.font = "700 13px Arial";
+  ctx.fillStyle = "rgba(255,255,255,0.48)";
+  ctx.fillText(caption, cx, cy + avatarSize + 58);
+
+  ctx.textAlign = "start";
+  ctx.textBaseline = "alphabetic";
+}
+
+function drawScreenTile(
+  ctx: CanvasRenderingContext2D,
+  tile: VideoEntry,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  ctx.save();
+
+  roundRect(ctx, x, y, width, height, 8);
+  ctx.clip();
+
+  ctx.fillStyle = "#03060f";
+  ctx.fillRect(x, y, width, height);
+
+  const canDrawVideo = tile.video && tile.video.readyState >= 2;
+
+  if (canDrawVideo && tile.video) {
+    drawContain(ctx, tile.video, x, y, width, height);
+  } else {
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.font = "800 15px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText("Waiting for screen share…", x + width / 2, y + height / 2);
+    ctx.textAlign = "start";
+  }
+
+  const label = truncateToWidth(ctx, tile.name, width - 80);
+  ctx.font = "800 13px Arial";
+  const labelWidth = Math.min(width - 24, ctx.measureText(label).width + 46);
+
+  ctx.fillStyle = "rgba(15,107,255,0.85)";
+  roundRect(ctx, x + 12, y + 12, labelWidth, 30, 999);
+  ctx.fill();
+
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(x + 27, y + 27, 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.font = "800 12px Arial";
+  ctx.fillText(label, x + 38, y + 32);
+
+  ctx.restore();
+}
+
+function drawCameraTile(
   ctx: CanvasRenderingContext2D,
   tile: VideoEntry,
   x: number,
@@ -131,46 +277,24 @@ function drawTile(
   if (canDrawVideo && tile.video) {
     drawCover(ctx, tile.video, x, y, width, height);
   } else {
-    ctx.fillStyle = "#071832";
-    ctx.fillRect(x, y, width, height);
-
-    const avatarSize = Math.min(width, height) * 0.22;
-    const cx = x + width / 2;
-    const cy = y + height / 2 - 18;
-
-    const gradient = ctx.createLinearGradient(
-      cx - avatarSize,
-      cy - avatarSize,
-      cx + avatarSize,
-      cy + avatarSize,
+    drawAvatarFallback(
+      ctx,
+      tile.name,
+      tile.cameraOn === false ? "Camera off" : "Connecting…",
+      x,
+      y,
+      width,
+      height,
     );
-    gradient.addColorStop(0, "#0f6bff");
-    gradient.addColorStop(0.55, "#6426ff");
-    gradient.addColorStop(1, "#10d98f");
-
-    ctx.fillStyle = gradient;
-    ctx.beginPath();
-    ctx.arc(cx, cy, avatarSize, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = "#ffffff";
-    ctx.font = `800 ${Math.max(22, avatarSize * 0.72)}px Arial`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(getInitials(tile.name), cx, cy);
-
-    ctx.font = "800 20px Arial";
-    ctx.fillText(tile.name, cx, cy + avatarSize + 34);
-
-    ctx.font = "700 13px Arial";
-    ctx.fillStyle = "rgba(255,255,255,0.48)";
-    ctx.fillText("Camera off", cx, cy + avatarSize + 58);
-
-    ctx.textAlign = "start";
-    ctx.textBaseline = "alphabetic";
   }
 
-  const labelWidth = Math.min(width - 24, 250);
+  const name = truncateToWidth(ctx, tile.name, Math.min(width - 24, 250) - 60);
+  ctx.font = "800 15px Arial";
+  const labelWidth = Math.min(
+    width - 24,
+    Math.max(120, ctx.measureText(name).width + 60),
+  );
+
   ctx.fillStyle = "rgba(3,10,31,0.72)";
   roundRect(ctx, x + 12, y + height - 48, labelWidth, 34, 10);
   ctx.fill();
@@ -181,8 +305,7 @@ function drawTile(
   ctx.fill();
 
   ctx.fillStyle = "#ffffff";
-  ctx.font = "800 15px Arial";
-  ctx.fillText(tile.name, x + 42, y + height - 26);
+  ctx.fillText(name, x + 42, y + height - 26);
 
   if (tile.cameraOn === false) {
     ctx.fillStyle = "rgba(3,10,31,0.72)";
@@ -197,13 +320,67 @@ function drawTile(
   ctx.restore();
 }
 
+function drawTile(
+  ctx: CanvasRenderingContext2D,
+  tile: VideoEntry,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  if (tile.isScreen) {
+    drawScreenTile(ctx, tile, x, y, width, height);
+  } else {
+    drawCameraTile(ctx, tile, x, y, width, height);
+  }
+}
+
+function drawStageBackground(ctx: CanvasRenderingContext2D) {
+
+  ctx.fillStyle = "#0a1636";
+  ctx.fillRect(0, 68, LOGICAL_WIDTH, LOGICAL_HEIGHT - 68 - 92);
+
+  ctx.save();
+  ctx.strokeStyle = "rgba(255,255,255,0.045)";
+  ctx.lineWidth = 1;
+
+  for (let gx = 0; gx <= LOGICAL_WIDTH; gx += 34) {
+    ctx.beginPath();
+    ctx.moveTo(gx, 68);
+    ctx.lineTo(gx, LOGICAL_HEIGHT - 92);
+    ctx.stroke();
+  }
+
+  for (let gy = 68; gy <= LOGICAL_HEIGHT - 92; gy += 34) {
+    ctx.beginPath();
+    ctx.moveTo(0, gy);
+    ctx.lineTo(LOGICAL_WIDTH, gy);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+
+  const glow = ctx.createRadialGradient(
+    LOGICAL_WIDTH / 2,
+    40,
+    10,
+    LOGICAL_WIDTH / 2,
+    40,
+    420,
+  );
+  glow.addColorStop(0, "rgba(59,130,246,0.16)");
+  glow.addColorStop(1, "rgba(59,130,246,0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 68, LOGICAL_WIDTH, 300);
+}
+
 function drawTopBar(
   ctx: CanvasRenderingContext2D,
   logo: HTMLImageElement | null,
   participantCount: number,
 ) {
   ctx.fillStyle = "#07122d";
-  ctx.fillRect(0, 0, 1280, 68);
+  ctx.fillRect(0, 0, LOGICAL_WIDTH, 68);
 
   if (logo) {
     ctx.drawImage(logo, 24, 17, 142, 43);
@@ -269,29 +446,55 @@ function drawChatPanel(ctx: CanvasRenderingContext2D, messages: any[]) {
     return;
   }
 
+  const bubbleWidth = width - 56;
+  const textMaxWidth = bubbleWidth - 32;
+
   for (const message of recent) {
     const name = message.userName || "Participant";
-    const text = message.message || "";
+    const text = String(message.message || "");
 
     ctx.fillStyle = "rgba(255,255,255,0.82)";
     ctx.font = "800 14px Arial";
-    ctx.fillText(name, x + 24, cursorY);
+    ctx.fillText(truncateToWidth(ctx, name, bubbleWidth), x + 24, cursorY);
+
+    ctx.font = "700 14px Arial";
+    const words = text.split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    let current = "";
+
+    for (const word of words) {
+      const candidate = current ? `${current} ${word}` : word;
+      if (ctx.measureText(candidate).width > textMaxWidth && current) {
+        lines.push(current);
+        current = word;
+        if (lines.length === 2) break;
+      } else {
+        current = candidate;
+      }
+    }
+    if (current && lines.length < 2) lines.push(current);
+    if (lines.length === 2 && words.join(" ") !== lines.join(" ")) {
+      lines[1] = truncateToWidth(ctx, `${lines[1]}`, textMaxWidth);
+    }
+
+    const bubbleHeight = lines.length > 1 ? 74 : 54;
 
     ctx.fillStyle = "rgba(255,255,255,0.10)";
-    roundRect(ctx, x + 24, cursorY + 10, width - 56, 54, 10);
+    roundRect(ctx, x + 24, cursorY + 10, bubbleWidth, bubbleHeight, 10);
     ctx.fill();
 
     ctx.fillStyle = "rgba(255,255,255,0.76)";
-    ctx.font = "700 14px Arial";
-    ctx.fillText(text.slice(0, 34), x + 40, cursorY + 42);
+    lines.forEach((line, index) => {
+      ctx.fillText(line, x + 40, cursorY + 42 + index * 20);
+    });
 
-    cursorY += 86;
+    cursorY += bubbleHeight + 32;
   }
 }
 
 function drawDock(ctx: CanvasRenderingContext2D) {
   ctx.fillStyle = "#08142f";
-  ctx.fillRect(0, 628, 1280, 92);
+  ctx.fillRect(0, 628, LOGICAL_WIDTH, 92);
 
   const items = [
     ["Chat", 446],
@@ -327,22 +530,19 @@ function drawWaitingSlate(
   logo: HTMLImageElement | null,
 ) {
   ctx.fillStyle = "#050b1f";
-  ctx.fillRect(0, 0, 1280, 720);
+  ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
 
-  ctx.fillStyle = "#07122d";
-  ctx.fillRect(0, 0, 1280, 68);
-
-  if (logo) {
-    ctx.drawImage(logo, 24, 17, 142, 43);
-  } else {
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "900 24px Arial";
-    ctx.fillText("Telefya", 30, 43);
-  }
+  drawTopBar(ctx, logo, 0);
 
   ctx.fillStyle = "#050914";
   roundRect(ctx, 10, 78, 920, 540, 12);
   ctx.fill();
+
+  ctx.fillStyle = "rgba(255,255,255,0.4)";
+  ctx.font = "800 16px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("Waiting for the meeting to start…", 470, 350);
+  ctx.textAlign = "start";
 
   ctx.fillStyle = "#0c1734";
   roundRect(ctx, 946, 78, 324, 540, 16);
@@ -356,7 +556,7 @@ function drawWaitingSlate(
   ctx.fillRect(966, 138, 284, 1);
 
   ctx.fillStyle = "#08142f";
-  ctx.fillRect(0, 628, 1280, 92);
+  ctx.fillRect(0, 628, LOGICAL_WIDTH, 92);
 }
 
 export default function RecorderPage() {
@@ -487,8 +687,13 @@ export default function RecorderPage() {
         return;
       }
 
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.scale(RENDER_SCALE, RENDER_SCALE);
+
       ctx.fillStyle = "#060b1f";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
 
       const participantById = new Map<string, ParticipantMeta>();
 
@@ -505,11 +710,17 @@ export default function RecorderPage() {
         return {
           id: stream.id,
           userId: stream.userId,
-          name:
-            stream.userName ||
-            participant?.userName ||
-            participant?.name ||
-            "Participant",
+          name: stream.isScreen
+            ? `${
+                stream.userName ||
+                participant?.userName ||
+                participant?.name ||
+                "Someone"
+              } — Presenting`
+            : stream.userName ||
+              participant?.userName ||
+              participant?.name ||
+              "Participant",
           isScreen: stream.isScreen,
           micOn:
             typeof participant?.micOn === "boolean"
@@ -550,20 +761,19 @@ export default function RecorderPage() {
         });
 
       const entries = [...videoEntries, ...knownAudioOnly];
-      const readyEntries = entries.filter((entry) => {
-        return !entry.video || entry.video.readyState >= 2;
-      });
 
-      if (!readyEntries.length) {
+      if (!entries.length) {
         drawWaitingSlate(ctx, logoRef.current);
+        ctx.restore();
         animation = requestAnimationFrame(draw);
         return;
       }
 
-      drawTopBar(ctx, logoRef.current, Math.max(1, readyEntries.length));
+      drawTopBar(ctx, logoRef.current, Math.max(1, entries.length));
+      drawStageBackground(ctx);
 
-      const screen = readyEntries.find((entry) => entry.isScreen);
-      const people = readyEntries.filter((entry) => entry.id !== screen?.id);
+      const screen = entries.find((entry) => entry.isScreen);
+      const people = entries.filter((entry) => entry.id !== screen?.id);
       const stageX = 10;
       const stageY = 78;
       const stageW = 920;
@@ -596,6 +806,7 @@ export default function RecorderPage() {
       drawChatPanel(ctx, room.messages || []);
       drawDock(ctx);
 
+      ctx.restore();
       animation = requestAnimationFrame(draw);
     }
 
@@ -656,15 +867,18 @@ export default function RecorderPage() {
       ]);
 
       const mimeType = MediaRecorder.isTypeSupported(
-        "video/webm;codecs=vp8,opus",
+        "video/webm;codecs=vp9,opus",
       )
-        ? "video/webm;codecs=vp8,opus"
-        : "video/webm";
+        ? "video/webm;codecs=vp9,opus"
+        : MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")
+          ? "video/webm;codecs=vp8,opus"
+          : "video/webm";
 
       const recorder = new MediaRecorder(mixedStream, {
         mimeType,
-        videoBitsPerSecond: 4_500_000,
-        audioBitsPerSecond: 128_000,
+
+        videoBitsPerSecond: 6_000_000,
+        audioBitsPerSecond: 160_000,
       });
 
       recorder.ondataavailable = (event) => {
@@ -750,8 +964,8 @@ export default function RecorderPage() {
     <main className="grid min-h-screen place-items-center bg-[#050b1f]">
       <canvas
         ref={canvasRef}
-        width={1280}
-        height={720}
+        width={RENDER_WIDTH}
+        height={RENDER_HEIGHT}
         className="h-screen w-screen object-contain"
       />
     </main>

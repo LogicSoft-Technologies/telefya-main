@@ -32,7 +32,7 @@ const plans: Plan[] = [
     code: "free",
     name: "Free",
     price: "$0",
-    suffix: "/forever",
+    suffix: "/month",
     desc: "For individuals testing secure video meetings.",
     cta: "Get started",
     href: "/register?plan=free",
