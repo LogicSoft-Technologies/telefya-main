@@ -15,10 +15,11 @@ import {
   ShieldCheck,
   User,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { registerUser } from "@/lib/api/auth";
 import { CountrySelect, PhoneCountrySelect } from "@/components/auth/CountrySelect";
 import { MeetingPreview } from "@/components/auth/MeetingPreview";
+import { countries } from "@/lib/data/countries";
 
 const initialForm = {
   first_name: "",
@@ -45,6 +46,49 @@ export default function Register() {
   function updateField(name: keyof typeof form, value: string) {
     setForm((current) => ({ ...current, [name]: value }));
   }
+
+  // Auto-detect country + dial code from the visitor's IP on first load.
+  // Fails silently — if it can't detect, the field just stays at defaults
+  // and the user picks manually, so nothing ever breaks for them.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function detectLocationFromIp() {
+      try {
+        const res = await fetch("https://ipapi.co/json/");
+        if (!res.ok) return;
+
+        const data = await res.json();
+        if (cancelled) return;
+
+        // Match against our own countries list by ISO2 code (e.g. "NG")
+        // rather than trusting ipapi.co's raw name/dial strings directly.
+        // This guarantees we only ever set values CountrySelect actually
+        // recognizes — if there's no match, nothing changes and the user
+        // just picks manually.
+        const isoFromIp: string | undefined = data.country_code;
+        const matched = isoFromIp
+          ? countries.find((c) => c.iso2.toLowerCase() === isoFromIp.toLowerCase())
+          : undefined;
+
+        if (matched) {
+          setForm((current) => ({
+            ...current,
+            country: matched.name,
+            country_code: matched.dial,
+          }));
+        }
+      } catch {
+        // Ignore — geolocation is a convenience, not a requirement.
+      }
+    }
+
+    detectLocationFromIp();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function validateForm() {
     if (form.password.length < 8) {

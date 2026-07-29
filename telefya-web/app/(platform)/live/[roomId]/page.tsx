@@ -300,9 +300,7 @@ function persistCustomBackgrounds(backgrounds: BackgroundOption[]) {
       CUSTOM_BACKGROUNDS_STORAGE_KEY,
       JSON.stringify(backgrounds),
     );
-  } catch {
-  
-  }
+  } catch {}
 }
 
 export default function LiveRoomPage() {
@@ -366,14 +364,14 @@ export default function LiveRoomPage() {
 
   const userId = user?.user_id || user?.id || user?.email || "guest-user";
 
- const room = useMediasoupRoom({
-  enabled: started,
-  roomId,
-  userId,
-  userName,
-  isHost,
-  virtualBackground: selectedBackground,
-});
+  const room = useMediasoupRoom({
+    enabled: started,
+    roomId,
+    userId,
+    userName,
+    isHost,
+    virtualBackground: selectedBackground,
+  });
 
   const roomSocket = (room as any).socket;
 
@@ -580,7 +578,10 @@ export default function LiveRoomPage() {
       : undefined;
 
     const presenterName =
-      stream.userName || participant?.userName || participant?.name || "Someone";
+      stream.userName ||
+      participant?.userName ||
+      participant?.name ||
+      "Someone";
 
     return {
       id: stream.id,
@@ -613,10 +614,9 @@ export default function LiveRoomPage() {
     ...overflowScreenTiles,
   ].filter(Boolean) as StageTile[];
 
-  const allParticipantTiles = [
-    localTile,
-    ...remotePersonTiles,
-  ].filter(Boolean) as StageTile[];
+  const allParticipantTiles = [localTile, ...remotePersonTiles].filter(
+    Boolean,
+  ) as StageTile[];
 
   const participantCount = Math.max(1, allParticipantTiles.length);
   const recordingReady = room.connected && Boolean(room.localStream);
@@ -643,22 +643,19 @@ export default function LiveRoomPage() {
     setChatOpen(true);
   }
 
-async function chooseBackground(
-  background: VirtualBackground,
-  id: string,
-) {
-  if (pendingBackgroundId) return;
+  async function chooseBackground(background: VirtualBackground, id: string) {
+    if (pendingBackgroundId) return;
 
-  setPendingBackgroundId(id);
+    setPendingBackgroundId(id);
 
-  try {
-    await room.setVirtualBackground(background);
-    setSelectedBackground(background);
-    setSelectedBackgroundId(id);
-  } finally {
-    setPendingBackgroundId(null);
+    try {
+      await room.setVirtualBackground(background);
+      setSelectedBackground(background);
+      setSelectedBackgroundId(id);
+    } finally {
+      setPendingBackgroundId(null);
+    }
   }
-}
 
   function addCustomBackground() {
     const url = window.prompt(
@@ -980,8 +977,8 @@ async function chooseBackground(
 
         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 h-36 bg-gradient-to-t from-black/55 to-transparent" />
 
-        <div className="absolute inset-x-0 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-30 flex justify-center px-3 sm:bottom-6 sm:px-4">
-          <div className="hidden items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.06] px-3 py-2.5 shadow-2xl backdrop-blur-2xl xl:flex">
+        <div className="pointer-events-none absolute inset-x-0 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-30 flex justify-center px-3 sm:bottom-6 sm:px-4">
+          <div className="pointer-events-auto hidden items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.06] px-3 py-2.5 shadow-2xl backdrop-blur-2xl xl:flex">
             <DockButton
               active={chatOpen}
               icon={MessageSquare}
@@ -1135,7 +1132,7 @@ async function chooseBackground(
             />
           </div>
 
-          <div className="flex w-full max-w-[340px] items-center justify-between gap-1 rounded-full border border-white/10 bg-white/10 px-2 py-2 shadow-2xl backdrop-blur-2xl xl:hidden">
+          <div className="pointer-events-auto flex w-full max-w-[340px] items-center justify-between gap-1 rounded-full border border-white/10 bg-white/10 px-2 py-2 shadow-2xl backdrop-blur-2xl xl:hidden">
             <DockButton
               size="md"
               active={!room.micOn}
@@ -1692,10 +1689,12 @@ function BackgroundPicker({
                           : "backdrop-blur-sm",
                     ].join(" ")}
                   />
-                  <Sparkles size={16} className="relative text-white drop-shadow" />
+                  <Sparkles
+                    size={16}
+                    className="relative text-white drop-shadow"
+                  />
                 </div>
               ) : isImage ? (
-
                 <img
                   src={option.value.url}
                   alt={option.label}
@@ -1922,7 +1921,10 @@ function TopPill({
       <span className="relative flex h-3.5 w-3.5 items-center justify-center">
         <Icon
           size={14}
-          className={[spin ? "animate-spin" : "", pulse ? "telefya-pulse-dot" : ""].join(" ")}
+          className={[
+            spin ? "animate-spin" : "",
+            pulse ? "telefya-pulse-dot" : "",
+          ].join(" ")}
         />
       </span>
       <span className="hidden sm:inline">{label}</span>
