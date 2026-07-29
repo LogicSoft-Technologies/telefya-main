@@ -11,18 +11,14 @@ import type {
 const BASE = "/conf_meeting/socket";
 
 export function sendRoomMessage(payload: SendMessagePayload, token?: string | null) {
-  return apiClient<RoomMessage>(`${BASE}/send-message`, {
-    method: "POST",
-    token,
-    body: JSON.stringify(payload),
+  return apiClient.post<RoomMessage>(`${BASE}/send-message`, payload, {
+    authToken: token,
   });
 }
 
 export function editRoomMessage(payload: EditMessagePayload, token?: string | null) {
-  return apiClient<EditMessageResponse>(`${BASE}/edit-message`, {
-    method: "POST",
-    token,
-    body: JSON.stringify(payload),
+  return apiClient.post<EditMessageResponse>(`${BASE}/edit-message`, payload, {
+    authToken: token,
   });
 }
 
@@ -30,9 +26,7 @@ export function deleteRoomMessage(
   payload: DeleteMessagePayload,
   token?: string | null
 ) {
-  return apiClient<DeleteMessageResponse>(`${BASE}/delete-message`, {
-    method: "POST",
-    token,
-    body: JSON.stringify(payload),
+  return apiClient.post<DeleteMessageResponse>(`${BASE}/delete-message`, payload, {
+    authToken: token,
   });
 }

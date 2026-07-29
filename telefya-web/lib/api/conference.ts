@@ -28,35 +28,31 @@ export type AgendaItem = {
 };
 
 export function listConferences(token: string) {
-  return apiClient<ApiResponse<Conference[]>>("/conferences", {
-    method: "GET",
-    token,
+  return apiClient.get<ApiResponse<Conference[]>>("/conferences", {
+    authToken: token,
   });
 }
 
 export function getConference(conferenceId: string, token: string) {
-  return apiClient<ApiResponse<Conference>>(`/conferences/${conferenceId}`, {
-    method: "GET",
-    token,
+  return apiClient.get<ApiResponse<Conference>>(`/conferences/${conferenceId}`, {
+    authToken: token,
   });
 }
 
 export function listSpeakers(conferenceId: string, token: string) {
-  return apiClient<ApiResponse<Speaker[]>>(
+  return apiClient.get<ApiResponse<Speaker[]>>(
     `/conferences/${conferenceId}/speakers`,
     {
-      method: "GET",
-      token,
+      authToken: token,
     }
   );
 }
 
 export function listAgenda(conferenceId: string, token: string) {
-  return apiClient<ApiResponse<AgendaItem[]>>(
+  return apiClient.get<ApiResponse<AgendaItem[]>>(
     `/conferences/${conferenceId}/agenda`,
     {
-      method: "GET",
-      token,
+      authToken: token,
     }
   );
 }

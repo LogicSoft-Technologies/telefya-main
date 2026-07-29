@@ -406,29 +406,13 @@ export function useMediasoupRoom(params: {
             const isVideo = data.consumer.kind === "video";
             const isAudio = data.consumer.kind === "audio";
 
-            consumer.on("transportclose", () => {
+           consumer.on("transportclose", () => {
               setRemoteStreams((current) =>
                 current.filter((item) => item.id !== consumer.id),
               );
               consumedProducerIdsRef.current.delete(data.producerId);
             });
-
-            consumer.on("producerclose", () => {
-              setRemoteStreams((current) =>
-                current.filter((item) => item.id !== consumer.id),
-              );
-              consumedProducerIdsRef.current.delete(data.producerId);
-
-              if (remoteUserId && !meta.isScreen) {
-                updateParticipant({
-                  userId: remoteUserId,
-                  userName: remoteUserName,
-                  micOn: isAudio ? false : undefined,
-                  cameraOn: isVideo ? false : undefined,
-                });
-              }
-            });
-
+            
             setRemoteStreams((current) => [
               ...current.filter((item) => item.producerId !== data.producerId),
               {
