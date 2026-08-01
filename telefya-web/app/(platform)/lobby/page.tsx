@@ -56,20 +56,27 @@ function getRoomPath(meetingUrl?: string) {
   }
 }
 
-function getMeetingDateLabel(timeZone?: string) {
-  if (!timeZone) return "No schedule time";
+function getMeetingDateLabel(meeting: ScheduledMeeting) {
+  const value = meeting.scheduled_for;
 
-  const decoded = decodeStoredText(timeZone);
-  const [datePart, ...zoneParts] = decoded.split(" ");
-  const zone = zoneParts.join(" ");
-  const date = new Date(datePart);
+  if (!value) {
+    return "Schedule unavailable";
+  }
 
-  if (Number.isNaN(date.getTime())) return decoded;
+  const isoValue = value.includes("T") ? value : value.replace(" ", "T");
+  const hasTimezone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(isoValue);
+  const utcValue = hasTimezone ? isoValue : `${isoValue}Z`;
 
-  return `${date.toLocaleString([], {
+  const date = new Date(utcValue);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString([], {
     dateStyle: "medium",
     timeStyle: "short",
-  })}${zone ? ` ${zone}` : ""}`;
+  });
 }
 
 function formatBytes(bytes?: number) {
@@ -108,6 +115,17 @@ export default function ConferenceLobbyPage() {
   }, [user]);
 
   const firstName = displayName.split(" ")[0] || "there";
+
+  const upcomingMeetings = useMemo(
+    () =>
+      meetings.filter(
+        (meeting) =>
+          !meeting.status ||
+          meeting.status === "upcoming",
+      ),
+    [meetings],
+  );
+
   const limits = subscription?.limits;
   const isFree = subscription?.plan_code === "free";
 
@@ -334,7 +352,7 @@ export default function ConferenceLobbyPage() {
           <SummaryCard
             icon={CalendarDays}
             label="Scheduled meetings"
-            value={String(meetings.length)}
+            value={String(upcomingMeetings.length)}
             tone="blue"
             loading={loading}
           />
@@ -362,7 +380,7 @@ export default function ConferenceLobbyPage() {
       <section className="telefya-in-fade-up telefya-stagger-2 overflow-hidden rounded-xl border border-border bg-white shadow-soft">
         <div className="flex flex-col justify-between gap-4 border-b border-border bg-white px-4 py-5 sm:px-5 lg:flex-row lg:items-center">
           <div>
-            <h2 className="text-xl font-black text-navy-900">Your meetings</h2>
+            <h2 className="text-xl font-black text-navy-900">Upcoming meetings</h2>
             <p className="mt-1 text-sm font-semibold leading-6 text-navy-500">
               Start as host, copy invite links, or clean up old sessions.
             </p>
@@ -370,7 +388,7 @@ export default function ConferenceLobbyPage() {
 
           <div className="inline-flex w-fit items-center gap-2 rounded-full bg-navy-50 px-4 py-2 text-xs font-black text-navy-500">
             <CheckCircle2 size={15} className="text-telefya-green" />
-            Synced with backend
+            Synced with server
           </div>
         </div>
 
@@ -381,7 +399,7 @@ export default function ConferenceLobbyPage() {
                 <MeetingCardSkeleton key={index} delayIndex={index} />
               ))}
             </div>
-          ) : meetings.length === 0 ? (
+          ) : upcomingMeetings.length === 0 ? (
             <div className="telefya-in-scale rounded-xl border border-dashed border-border bg-navy-50 p-6 text-center sm:p-8">
               <div className="mx-auto grid h-14 w-14 place-items-center rounded-xl bg-white text-telefya-violet shadow-soft">
                 <Video size={24} />
@@ -401,7 +419,7 @@ export default function ConferenceLobbyPage() {
             </div>
           ) : (
             <div className="grid gap-4">
-              {meetings.map((meeting, index) => {
+              {upcomingMeetings.map((meeting, index) => {
                 const decodedUrl = decodeStoredText(meeting.meeting_url);
                 const roomPath = getRoomPath(meeting.meeting_url);
                 const meetingLabel = meeting.des || "Telefya meeting";
@@ -431,7 +449,7 @@ export default function ConferenceLobbyPage() {
                       <div className="mt-3 flex flex-wrap gap-3 text-sm font-semibold text-navy-500">
                         <span className="inline-flex items-center gap-2">
                           <Clock3 size={16} className="text-telefya-violet" />
-                          {getMeetingDateLabel(meeting.time_zone)}
+                          {getMeetingDateLabel(meeting)}
                         </span>
                       </div>
 

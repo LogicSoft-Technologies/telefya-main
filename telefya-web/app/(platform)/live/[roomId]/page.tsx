@@ -33,6 +33,9 @@ import {
   VideoOff,
   Maximize2,
   Minimize2,
+  Clock3,
+  UserCheck,
+  UserX,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -40,6 +43,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { LiveVideoTile } from "@/components/platform/live-video-tile";
 import { getSavedUser } from "@/lib/auth/session";
 import { useMediasoupRoom } from "@/hooks/use-mediasoup-room";
+import { getMeetings } from "@/lib/api/meetings";
 import {
   isVirtualBackgroundSupported,
   type VirtualBackground,
@@ -64,6 +68,14 @@ type ParticipantMeta = {
   micOn?: boolean;
   cameraOn?: boolean;
   isHost?: boolean;
+};
+
+type WaitingRoomRequest = {
+  requestId: string;
+  roomId: string;
+  userId: string;
+  userName: string;
+  requestedAt: string;
 };
 
 type StageTile = {
@@ -303,18 +315,44 @@ function persistCustomBackgrounds(backgrounds: BackgroundOption[]) {
   } catch {}
 }
 
+function getRoomIdFromMeetingUrl(value?: string) {
+  if (!value) return "";
+
+  try {
+    const url = new URL(value);
+    const parts = url.pathname
+      .split("/")
+      .map((part) => decodeURIComponent(part).trim())
+      .filter(Boolean);
+
+    const liveIndex = parts.lastIndexOf("live");
+
+    return (liveIndex >= 0 ? parts[liveIndex + 1] : parts.at(-1)) || "";
+  } catch {
+    return value.split("?")[0].split("/").filter(Boolean).at(-1) || "";
+  }
+}
+
 export default function LiveRoomPage() {
   const params = useParams<{ roomId: string }>();
   const roomId = decodeURIComponent(params.roomId);
 
   const [started, setStarted] = useState(false);
   const [isHost, setIsHost] = useState(false);
+  const [canStartAsHost, setCanStartAsHost] = useState(false);
+
+  const [checkingHostAccess, setCheckingHostAccess] = useState(true);
   const [copied, setCopied] = useState(false);
   const [chatOpen, setChatOpen] = useState(true);
   const [expanded, setExpanded] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [participantsOpen, setParticipantsOpen] = useState(false);
   const [recordingAction, setRecordingAction] = useState(false);
+  const [admissionActionId, setAdmissionActionId] = useState<string | null>(
+    null,
+  );
+
+  const [admissionError, setAdmissionError] = useState("");
   const [localRecordingNotice, setLocalRecordingNotice] = useState("");
   const [billingNotice, setBillingNotice] = useState<BillingNotice | null>(
     null,
@@ -354,6 +392,44 @@ export default function LiveRoomPage() {
     setUser(getSavedUser());
   }, []);
 
+  useEffect(() => {
+    let active = true;
+
+    async function checkHostAccess() {
+      setCheckingHostAccess(true);
+
+      try {
+        const meetings = await getMeetings();
+
+        if (!active) return;
+
+        setCanStartAsHost(
+          meetings.some((meeting) => {
+            const scheduledRoomId =
+              meeting.room_id || getRoomIdFromMeetingUrl(meeting.meeting_url);
+
+            return String(scheduledRoomId) === String(roomId);
+          }),
+        );
+      } catch {
+        if (active) {
+          // Do not show host controls when verification fails.
+          setCanStartAsHost(false);
+        }
+      } finally {
+        if (active) {
+          setCheckingHostAccess(false);
+        }
+      }
+    }
+
+    void checkHostAccess();
+
+    return () => {
+      active = false;
+    };
+  }, [roomId]);
+
   const userName = useMemo(
     () =>
       [user?.first_name, user?.last_name].filter(Boolean).join(" ") ||
@@ -372,6 +448,38 @@ export default function LiveRoomPage() {
     isHost,
     virtualBackground: selectedBackground,
   });
+
+  const isCurrentUserHost = room.isCurrentUserHost;
+
+  const waitingForHost =
+    room.waitingRoomStatus === "requesting" ||
+    room.waitingRoomStatus === "waiting";
+
+  const requestDeclined = room.waitingRoomStatus === "declined";
+
+  const admissionRequests = room.waitingRoomRequests as WaitingRoomRequest[];
+
+  async function respondToAdmission(
+    requestId: string,
+    decision: "approve" | "decline",
+  ) {
+    if (admissionActionId) return;
+
+    setAdmissionActionId(requestId);
+    setAdmissionError("");
+
+    try {
+      await room.respondToWaitingRoomRequest(requestId, decision);
+    } catch (error) {
+      setAdmissionError(
+        error instanceof Error
+          ? error.message
+          : "Unable to update this join request.",
+      );
+    } finally {
+      setAdmissionActionId(null);
+    }
+  }
 
   const roomSocket = (room as any).socket;
 
@@ -757,8 +865,9 @@ export default function LiveRoomPage() {
               </h1>
 
               <p className="telefya-in-fade-up telefya-stagger-3 mt-4 max-w-2xl text-sm leading-7 text-navy-500 sm:text-base sm:leading-8">
-                Start as host to open the room, or join as a participant after
-                the host has started the session.
+                {canStartAsHost
+                  ? "You scheduled this meeting and can start it now."
+                  : "Request access to join this meeting. The host will let you in."}
               </p>
 
               <div className="telefya-in-fade-up telefya-stagger-4 mt-6 rounded-xl border border-border bg-white/85 p-4 shadow-soft backdrop-blur">
@@ -781,20 +890,27 @@ export default function LiveRoomPage() {
               </h2>
 
               <div className="mt-6 grid gap-3">
-                <button
-                  onClick={startAsHost}
-                  className="telefya-interactive telefya-lift telefya-press telefya-focus-ring inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-telefya-blue px-5 text-sm font-black text-white shadow-soft hover:bg-telefya-violet"
-                >
-                  <Radio size={17} />
-                  Start meeting as host
-                </button>
+                {canStartAsHost ? (
+                  <button
+                    onClick={startAsHost}
+                    className="telefya-interactive telefya-lift telefya-press telefya-focus-ring inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-telefya-blue px-5 text-sm font-black text-white shadow-soft hover:bg-telefya-violet"
+                  >
+                    <Radio size={17} />
+                    Start meeting
+                  </button>
+                ) : null}
 
                 <button
                   onClick={joinAsParticipant}
-                  className="telefya-interactive telefya-press telefya-focus-ring inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-border bg-white px-5 text-sm font-black text-navy-800 hover:border-telefya-blue hover:text-telefya-blue"
+                  disabled={checkingHostAccess}
+                  className="telefya-interactive telefya-press telefya-focus-ring inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-border bg-white px-5 text-sm font-black text-navy-800 hover:border-telefya-blue hover:text-telefya-blue disabled:cursor-wait disabled:opacity-60"
                 >
-                  <Video size={17} />
-                  Join as participant
+                  {checkingHostAccess ? (
+                    <Loader2 size={17} className="animate-spin" />
+                  ) : (
+                    <Video size={17} />
+                  )}
+                  {checkingHostAccess ? "Checking access..." : "Join meeting"}
                 </button>
 
                 <button
@@ -812,6 +928,84 @@ export default function LiveRoomPage() {
                 <StatusLine label="Media" value="Camera and mic after entry" />
               </div>
             </div>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (waitingForHost || requestDeclined) {
+    const declined = requestDeclined;
+
+    return (
+      <main className="grid min-h-[calc(100vh-68px)] place-items-center bg-[#060b1f] px-4 py-8">
+        <RoomStyles />
+
+        <section className="w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-[#0b1734] shadow-2xl">
+          <div className="h-1 bg-gradient-to-r from-telefya-blue via-telefya-violet to-telefya-green" />
+
+          <div className="p-6 text-center sm:p-8">
+            <Image
+              src="/images/telefya-logo.png"
+              alt="Telefya"
+              width={156}
+              height={48}
+              priority
+              className="mx-auto h-9 w-auto"
+            />
+
+            <div
+              className={[
+                "mx-auto mt-8 grid h-16 w-16 place-items-center rounded-2xl ring-1",
+                declined
+                  ? "bg-red-500/15 text-red-300 ring-red-400/20"
+                  : "bg-telefya-blue/15 text-blue-300 ring-blue-400/20",
+              ].join(" ")}
+            >
+              {declined ? (
+                <UserX size={28} />
+              ) : (
+                <Clock3
+                  size={28}
+                  className={
+                    room.waitingRoomStatus === "requesting"
+                      ? "animate-pulse"
+                      : ""
+                  }
+                />
+              )}
+            </div>
+
+            <p className="mt-6 text-xs font-black uppercase tracking-[0.16em] text-white/45">
+              {declined ? "Meeting access" : "Waiting room"}
+            </p>
+
+            <h1 className="mt-2 text-2xl font-black text-white">
+              {declined ? "Your request was declined" : "Waiting for the host"}
+            </h1>
+
+            <p className="mt-3 text-sm leading-6 text-white/60">
+              {room.waitingRoomMessage ||
+                (declined
+                  ? "The host did not approve this request."
+                  : "The host will let you in when the meeting is ready.")}
+            </p>
+
+            {!declined ? (
+              <div className="mt-6 inline-flex items-center gap-2 rounded-full bg-white/5 px-3 py-2 text-xs font-bold text-white/55 ring-1 ring-white/10">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-telefya-green" />
+                Request sent securely
+              </div>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={leaveRoom}
+              className="mt-8 inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-white/10 px-4 text-sm font-black text-white transition hover:bg-red-500 hover:text-white"
+            >
+              <PhoneOff size={17} />
+              Leave
+            </button>
           </div>
         </section>
       </main>
@@ -1013,15 +1207,41 @@ export default function LiveRoomPage() {
               <DockButton
                 active={participantsOpen}
                 icon={Users}
-                label="Participants"
+                label={
+                  admissionRequests.length
+                    ? `${admissionRequests.length} waiting to join`
+                    : "Participants"
+                }
                 onClick={() => {
                   setMoreOpen(false);
                   setParticipantsOpen((value) => !value);
                 }}
               />
 
+              {isCurrentUserHost && admissionRequests.length > 0 ? (
+                <span
+                  aria-label={`${admissionRequests.length} participant request${
+                    admissionRequests.length === 1 ? "" : "s"
+                  } waiting`}
+                  className="pointer-events-none absolute -right-1 -top-1 grid min-h-5 min-w-5 place-items-center rounded-full border-2 border-[#071633] bg-red-500 px-1 text-[10px] font-black text-white shadow-lg shadow-red-500/40"
+                >
+                  {admissionRequests.length > 9
+                    ? "9+"
+                    : admissionRequests.length}
+                </span>
+              ) : null}
+
               {participantsOpen ? (
                 <div className="telefya-in-scale absolute bottom-[76px] left-1/2 w-[260px] -translate-x-1/2 overflow-hidden rounded-2xl border border-white/10 bg-white p-2 text-navy-900 shadow-enterprise">
+                  {isCurrentUserHost && admissionRequests.length ? (
+                    <AdmissionRequests
+                      requests={admissionRequests}
+                      pendingId={admissionActionId}
+                      error={admissionError}
+                      onRespond={respondToAdmission}
+                    />
+                  ) : null}
+
                   <p className="px-2 py-1.5 text-[11px] font-black uppercase tracking-[0.12em] text-navy-400">
                     Participants ({participantCount})
                   </p>
@@ -1059,7 +1279,7 @@ export default function LiveRoomPage() {
                     onRemoveCustom={removeCustomBackground}
                   />
 
-                  {isHost ? (
+                  {isCurrentUserHost ? (
                     <MenuAction
                       disabled={
                         recordingAction || (!room.recording && !recordingReady)
@@ -1214,15 +1434,23 @@ export default function LiveRoomPage() {
 
           <MenuAction
             icon={Users}
-            label={`Participants (${participantCount})`}
-            caption="See who is in the meeting"
+            label={
+              isCurrentUserHost && admissionRequests.length
+                ? `Participants · ${admissionRequests.length} waiting`
+                : `Participants (${participantCount})`
+            }
+            caption={
+              isCurrentUserHost && admissionRequests.length
+                ? "Review admission requests"
+                : "See who is in the meeting"
+            }
             onClick={() => {
               setMoreOpen(false);
               setParticipantsOpen(true);
             }}
           />
 
-          {isHost ? (
+          {isCurrentUserHost ? (
             <MenuAction
               disabled={recordingAction || (!room.recording && !recordingReady)}
               danger={room.recording}
@@ -1278,6 +1506,15 @@ export default function LiveRoomPage() {
           onClose={() => setParticipantsOpen(false)}
           title={`Participants (${participantCount})`}
         >
+          {isCurrentUserHost && admissionRequests.length ? (
+            <AdmissionRequests
+              requests={admissionRequests}
+              pendingId={admissionActionId}
+              error={admissionError}
+              onRespond={respondToAdmission}
+            />
+          ) : null}
+
           <div className="grid gap-1">
             {allParticipantTiles.map((tile) => (
               <ParticipantRow key={tile.id} tile={tile} />
@@ -1755,6 +1992,82 @@ function BackgroundPicker({
         <p className="mt-1.5 px-1 text-[10px] font-bold text-red-500">
           {room.backgroundError}
         </p>
+      ) : null}
+    </div>
+  );
+}
+
+function AdmissionRequests({
+  requests,
+  pendingId,
+  error,
+  onRespond,
+}: {
+  requests: WaitingRoomRequest[];
+  pendingId: string | null;
+  error: string;
+  onRespond: (
+    requestId: string,
+    decision: "approve" | "decline",
+  ) => Promise<void>;
+}) {
+  return (
+    <div className="mb-2 rounded-xl border border-blue-100 bg-blue-50 p-2">
+      <div className="flex items-center justify-between gap-2 px-1 py-1">
+        <p className="text-[11px] font-black uppercase tracking-[0.12em] text-telefya-blue">
+          Waiting to join ({requests.length})
+        </p>
+
+        <span className="h-2 w-2 animate-pulse rounded-full bg-telefya-blue" />
+      </div>
+
+      <div className="mt-1 grid gap-1">
+        {requests.map((request) => {
+          const pending = pendingId === request.requestId;
+
+          return (
+            <div
+              key={request.requestId}
+              className="flex items-center gap-2 rounded-lg bg-white p-2 shadow-sm"
+            >
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-navy-50 text-xs font-black text-navy-700">
+                {getInitials(request.userName)}
+              </span>
+
+              <span className="min-w-0 flex-1 truncate text-xs font-black text-navy-800">
+                {request.userName}
+              </span>
+
+              <button
+                type="button"
+                disabled={Boolean(pendingId)}
+                onClick={() => void onRespond(request.requestId, "approve")}
+                title={`Admit ${request.userName}`}
+                className="grid h-8 w-8 place-items-center rounded-lg bg-telefya-green text-white transition hover:brightness-95 disabled:opacity-50"
+              >
+                {pending ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <UserCheck size={15} />
+                )}
+              </button>
+
+              <button
+                type="button"
+                disabled={Boolean(pendingId)}
+                onClick={() => void onRespond(request.requestId, "decline")}
+                title={`Decline ${request.userName}`}
+                className="grid h-8 w-8 place-items-center rounded-lg bg-red-500 text-white transition hover:bg-red-600 disabled:opacity-50"
+              >
+                <UserX size={15} />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {error ? (
+        <p className="px-1 pt-2 text-[11px] font-bold text-red-500">{error}</p>
       ) : null}
     </div>
   );

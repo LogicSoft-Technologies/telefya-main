@@ -1,3 +1,5 @@
+const crypto = require("crypto");
+
 const {
   setupMediasoup,
   setIo,
@@ -38,6 +40,8 @@ module.exports = async function mediasoupSocket(io, pubClient, subClient) {
   await setupMediasoup(pubClient, subClient);
   setPubSub(pubClient, subClient);
 
+  // Key: `${roomId}:${userId}`
+  // A guest stays here until the scheduled meeting host admits or declines them.
   const pendingJoinRequests = new Map();
   const roomParticipants = new Map();
 
@@ -454,46 +458,407 @@ module.exports = async function mediasoupSocket(io, pubClient, subClient) {
     return count;
   }
 
+  function normalizeId(value) {
+    return String(value || "").trim();
+  }
+
+  function getWaitingRoomKey(roomId, userId) {
+    return `${normalizeId(roomId)}:${normalizeId(userId)}`;
+  }
+
+  function isValidRoomId(roomId) {
+    return /^[a-zA-Z0-9_-]{3,120}$/.test(normalizeId(roomId));
+  }
+
+  function getAuthenticatedSocketUserId(socket) {
+    return normalizeId(socket.userId);
+  }
+
+  function getPendingRequest(roomId, userId) {
+    return pendingJoinRequests.get(getWaitingRoomKey(roomId, userId));
+  }
+
+  function removePendingRequest(roomId, userId) {
+    pendingJoinRequests.delete(getWaitingRoomKey(roomId, userId));
+  }
+
+  function getRoomHostSocket(roomId) {
+    const room = rooms.get(roomId);
+
+    if (!room?.hostUserId) {
+      return null;
+    }
+
+    const hostUserId = normalizeId(room.hostUserId);
+
+    // `io` here is the /conf_meeting namespace, so use its own rooms and sockets.
+    const socketIds = io.adapter?.rooms?.get(roomId);
+
+    if (!socketIds) {
+      return null;
+    }
+
+    for (const socketId of socketIds) {
+      const connectedSocket = io.sockets?.get(socketId);
+
+      if (
+        connectedSocket?.data?.isHost === true &&
+        normalizeId(connectedSocket.data.userId) === hostUserId
+      ) {
+        return connectedSocket;
+      }
+    }
+
+    return null;
+  }
+
+  async function getScheduledMeetingHostUserId(roomId) {
+    const normalizedRoomId = normalizeId(roomId);
+
+    if (!isValidRoomId(normalizedRoomId)) {
+      return null;
+    }
+
+    const result = await query(
+      `
+      SELECT shedular_user_id
+      FROM meeting_schedules
+      WHERE room_id = ?
+      AND status IN ('upcoming', 'live')
+      ORDER BY id DESC
+      LIMIT 1
+    `,
+      [normalizedRoomId],
+    );
+
+    return normalizeId(result?.[0]?.shedular_user_id) || null;
+  }
+
+  async function getWaitingRoomAccess(socket, roomId, userId, isBot) {
+    const authenticatedUserId = getAuthenticatedSocketUserId(socket);
+    const requestedUserId = normalizeId(userId);
+
+    if (!isBot && !authenticatedUserId) {
+      return {
+        allowed: false,
+        code: "UNAUTHENTICATED",
+        message: "Sign in before joining this meeting.",
+      };
+    }
+
+    if (!isBot && authenticatedUserId !== requestedUserId) {
+      return {
+        allowed: false,
+        code: "IDENTITY_MISMATCH",
+        message: "Meeting identity verification failed.",
+      };
+    }
+
+    if (isBot) {
+      return {
+        allowed: true,
+        isHost: false,
+        hostUserId: null,
+      };
+    }
+
+    const hostUserId = await getScheduledMeetingHostUserId(roomId);
+
+    if (!hostUserId) {
+      return {
+        allowed: false,
+        code: "MEETING_NOT_FOUND",
+        message:
+          "This meeting link is invalid or the meeting is no longer available.",
+      };
+    }
+
+    const isHost = authenticatedUserId === hostUserId;
+
+    console.log("[waiting-room] host decision", {
+      roomId,
+      authenticatedUserId,
+      requestedUserId,
+      hostUserId,
+      isHost,
+      socketUser: socket.user,
+    });
+
+    if (isHost) {
+      return {
+        allowed: true,
+        isHost: true,
+        hostUserId,
+      };
+    }
+
+    const request = getPendingRequest(roomId, requestedUserId);
+
+    if (request?.status === "approved") {
+      // The user identity was already verified above. Allow an approved
+      // participant to finish joining after a Socket.IO reconnect.
+      request.socketId = socket.id;
+      request.reconnectedAt = new Date().toISOString();
+
+      return {
+        allowed: true,
+        isHost: false,
+        hostUserId,
+      };
+    }
+
+    return {
+      allowed: false,
+      isHost: false,
+      hostUserId,
+      code:
+        request?.status === "declined"
+          ? "WAITING_ROOM_DECLINED"
+          : "WAITING_ROOM_APPROVAL_REQUIRED",
+      message:
+        request?.status === "declined"
+          ? "The host declined your request to join."
+          : "Waiting for the host to admit you.",
+    };
+  }
+
+  function emitWaitingRequestToHost(request) {
+    const hostSocket = getRoomHostSocket(request.roomId);
+
+    if (!hostSocket) return false;
+
+    hostSocket.emit("waiting-room:request", {
+      requestId: request.requestId,
+      roomId: request.roomId,
+      userId: request.userId,
+      userName: request.userName,
+      requestedAt: request.requestedAt,
+    });
+
+    return true;
+  }
+
+  function emitPendingRequestsToHost(roomId) {
+    const hostSocket = getRoomHostSocket(roomId);
+
+    if (!hostSocket) return;
+
+    const requests = Array.from(pendingJoinRequests.values())
+      .filter(
+        (request) => request.roomId === roomId && request.status === "pending",
+      )
+      .map((request) => ({
+        requestId: request.requestId,
+        roomId: request.roomId,
+        userId: request.userId,
+        userName: request.userName,
+        requestedAt: request.requestedAt,
+      }));
+
+    hostSocket.emit("waiting-room:sync", { roomId, requests });
+  }
+
   io.on("connection", (socket) => {
-    socket.on("request-join", (data, callback) => {
-      const { roomId, userId, userName, isHost } = data;
+    socket.on(
+      "waiting-room:request",
+      async ({ roomId, userId, userName }, callback) => {
+        try {
+          const normalizedRoomId = normalizeId(roomId);
+          const normalizedUserId = normalizeId(userId);
+          const normalizedUserName = normalizeId(userName) || "Participant";
 
-      if (isHost) {
-        io.emit("host-joined", { userId, userName, roomId });
-        callback({ message: "You are the host", roomIsEmpty: false });
-        return;
-      }
+          const access = await getWaitingRoomAccess(
+            socket,
+            normalizedRoomId,
+            normalizedUserId,
+            false,
+          );
 
-      if (!rooms.has(roomId)) {
-        callback({
-          message:
-            "Room is empty. Please wait for the host to start the meeting.",
-          roomIsEmpty: true,
-        });
-        return;
-      }
+          if (access.isHost) {
+            callback?.({
+              success: true,
+              status: "host",
+              message: "You are the meeting host.",
+            });
+            return;
+          }
 
-      pendingJoinRequests.set(userId, socket.id);
-      io.to(roomId).emit("request-joined", { userId, userName });
-    });
+          if (
+            access.code === "MEETING_NOT_FOUND" ||
+            access.code === "UNAUTHENTICATED" ||
+            access.code === "IDENTITY_MISMATCH"
+          ) {
+            callback?.({
+              success: false,
+              ...access,
+            });
+            return;
+          }
 
-    socket.on("response-join", (data) => {
-      const { status, roomId, userId, userName } = data;
-      const targetSocketId = pendingJoinRequests.get(userId);
+          const key = getWaitingRoomKey(normalizedRoomId, normalizedUserId);
 
-      if (targetSocketId) {
-        io.to(targetSocketId).emit("response-joined", {
-          status,
-          userId,
-          userName,
-          roomId,
-        });
-      } else {
-        io.emit("response-joined", { status, userId, userName, roomId });
-      }
+          const request = {
+            requestId: crypto.randomUUID(),
+            roomId: normalizedRoomId,
+            userId: normalizedUserId,
+            userName: normalizedUserName,
+            socketId: socket.id,
+            status: "pending",
+            requestedAt: new Date().toISOString(),
+          };
 
-      pendingJoinRequests.delete(userId);
-    });
+          const existing = pendingJoinRequests.get(key);
+
+          if (existing?.status === "approved") {
+            callback?.({
+              success: true,
+              status: "approved",
+              requestId: existing.requestId,
+            });
+            return;
+          }
+
+          pendingJoinRequests.set(key, request);
+
+          const hostIsConnected = emitWaitingRequestToHost(request);
+
+          socket.emit("waiting-room:status", {
+            roomId: normalizedRoomId,
+            status: "pending",
+            hostIsConnected,
+            message: hostIsConnected
+              ? "Waiting for the host to admit you."
+              : "Waiting for the host to start the meeting.",
+          });
+
+          callback?.({
+            success: true,
+            status: "pending",
+            requestId: request.requestId,
+            hostIsConnected,
+          });
+        } catch (error) {
+          callback?.({
+            success: false,
+            code: "WAITING_ROOM_REQUEST_FAILED",
+            message:
+              error?.message || "Unable to request access to this meeting.",
+          });
+        }
+      },
+    );
+
+    socket.on(
+      "waiting-room:respond",
+      async ({ roomId, requestId, decision }, callback) => {
+        try {
+          const normalizedRoomId = normalizeId(roomId);
+          const normalizedRequestId = normalizeId(requestId);
+          const hostUserId = getAuthenticatedSocketUserId(socket);
+
+          if (
+            !socket.data?.isHost ||
+            normalizeId(socket.data.userId) !== hostUserId
+          ) {
+            callback?.({
+              success: false,
+              code: "HOST_ONLY",
+              message: "Only the meeting host can approve participants.",
+            });
+            return;
+          }
+
+          const scheduledHostUserId =
+            await getScheduledMeetingHostUserId(normalizedRoomId);
+
+          if (!scheduledHostUserId || hostUserId !== scheduledHostUserId) {
+            callback?.({
+              success: false,
+              code: "HOST_VERIFICATION_FAILED",
+              message: "Host verification failed for this meeting.",
+            });
+            return;
+          }
+
+          if (decision !== "approve" && decision !== "decline") {
+            callback?.({
+              success: false,
+              code: "INVALID_DECISION",
+              message: "Invalid waiting-room decision.",
+            });
+            return;
+          }
+
+          const request = Array.from(pendingJoinRequests.values()).find(
+            (item) =>
+              item.roomId === normalizedRoomId &&
+              item.requestId === normalizedRequestId &&
+              item.status === "pending",
+          );
+
+          if (!request) {
+            callback?.({
+              success: false,
+              code: "REQUEST_NOT_FOUND",
+              message: "This join request has expired or was already handled.",
+            });
+            return;
+          }
+
+          const approved = decision === "approve";
+
+          request.status = approved ? "approved" : "declined";
+          request.respondedAt = new Date().toISOString();
+          request.respondedBy = hostUserId;
+
+          // `io` is the /conf_meeting namespace.
+          const guestSocket = io.sockets?.get(request.socketId);
+
+          if (guestSocket?.connected) {
+            guestSocket.emit("waiting-room:decision", {
+              requestId: request.requestId,
+              roomId: request.roomId,
+              status: request.status,
+              message: approved
+                ? "The host admitted you. Joining meeting..."
+                : "The host declined your request to join.",
+            });
+          }
+
+          if (!approved) {
+            removePendingRequest(request.roomId, request.userId);
+          }
+
+          socket.emit("waiting-room:request-resolved", {
+            requestId: request.requestId,
+            roomId: request.roomId,
+            userId: request.userId,
+            status: request.status,
+          });
+
+          callback?.({
+            success: true,
+            requestId: request.requestId,
+            status: request.status,
+          });
+        } catch (error) {
+          console.error("[waiting-room] response failed", {
+            roomId,
+            requestId,
+            decision,
+            hostUserId: socket.data?.userId,
+            message: error?.message,
+          });
+
+          callback?.({
+            success: false,
+            code: "WAITING_ROOM_RESPONSE_FAILED",
+            message:
+              error?.message || "Unable to respond to this join request.",
+          });
+        }
+      },
+    );
 
     socket.on(
       "join",
@@ -525,6 +890,39 @@ module.exports = async function mediasoupSocket(io, pubClient, subClient) {
             return;
           }
 
+          const waitingRoomAccess = await getWaitingRoomAccess(
+            socket,
+            roomId,
+            userId,
+            Boolean(isBot),
+          );
+
+          if (!waitingRoomAccess.allowed) {
+            const denial = {
+              success: false,
+              error: waitingRoomAccess.message,
+              message: waitingRoomAccess.message,
+              code: waitingRoomAccess.code,
+              status: 403,
+            };
+
+            if (typeof cb === "function") {
+              cb(denial);
+            }
+
+            socket.emit("waiting-room:status", {
+              roomId,
+              status: "pending",
+              message: waitingRoomAccess.message,
+              code: waitingRoomAccess.code,
+            });
+
+            return;
+          }
+
+          // Never trust isHost sent by a browser.
+          isHost = Boolean(waitingRoomAccess.isHost);
+
           const initialBillingPolicy = await resolveRoomBillingPolicy({
             roomId,
             userId,
@@ -540,7 +938,7 @@ module.exports = async function mediasoupSocket(io, pubClient, subClient) {
             );
 
             if (!participantAccess.allowed) {
-              pendingJoinRequests.delete(userId);
+              removePendingRequest(roomId, userId);
 
               const denial = buildBillingDenial({
                 code: participantAccess.code,
@@ -604,7 +1002,7 @@ module.exports = async function mediasoupSocket(io, pubClient, subClient) {
           scheduleRoomDurationLimit(roomId, activeBillingPolicy);
 
           if (!isBot) {
-            pendingJoinRequests.delete(userId);
+            removePendingRequest(roomId, userId);
 
             upsertRoomParticipant(roomId, {
               userId,
@@ -643,6 +1041,10 @@ module.exports = async function mediasoupSocket(io, pubClient, subClient) {
               cameraOn: Boolean(cameraOn),
               isHost: joinResult.isHost,
             });
+          }
+
+          if (joinResult.isHost) {
+            emitPendingRequestsToHost(roomId);
           }
         } catch (err) {
           console.error(
@@ -1241,9 +1643,9 @@ module.exports = async function mediasoupSocket(io, pubClient, subClient) {
     socket.on("disconnect", async () => {
       const { roomId, userId } = socket.data || {};
 
-      for (const [pendingUserId, socketId] of pendingJoinRequests.entries()) {
-        if (socketId === socket.id) {
-          pendingJoinRequests.delete(pendingUserId);
+      for (const [requestKey, request] of pendingJoinRequests.entries()) {
+        if (request.socketId === socket.id) {
+          pendingJoinRequests.delete(requestKey);
         }
       }
 

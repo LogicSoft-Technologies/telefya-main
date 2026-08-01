@@ -131,6 +131,22 @@ type BillingEventPayload = {
   minutesRemaining?: number;
 };
 
+type WaitingRoomStatus =
+  | "idle"
+  | "requesting"
+  | "waiting"
+  | "admitted"
+  | "declined"
+  | "host";
+
+type WaitingRoomRequest = {
+  requestId: string;
+  roomId: string;
+  userId: string;
+  userName: string;
+  requestedAt: string;
+};
+
 function waitForSocketEvent<T>(
   socket: ReturnType<typeof getMeetingSocket>,
   event: string,
@@ -221,7 +237,9 @@ export function useMediasoupRoom(params: {
   const sourceStreamRef = useRef<MediaStream | null>(null);
 
   const engineRef = useRef<VirtualBackgroundEngine | null>(null);
-
+  const roomJoinedRef = useRef(false);
+  const currentUserIsHostRef = useRef(false);
+  const [isCurrentUserHost, setIsCurrentUserHost] = useState(false);
   const startedRef = useRef(false);
   const remoteStreamsRef = useRef<RemoteStream[]>([]);
   const virtualBackgroundRef = useRef<VirtualBackground>(virtualBackground);
@@ -257,6 +275,14 @@ export function useMediasoupRoom(params: {
   const [billingPolicy, setBillingPolicy] = useState<BillingPolicy | null>(
     null,
   );
+  const [waitingRoomStatus, setWaitingRoomStatus] =
+    useState<WaitingRoomStatus>("idle");
+
+  const [waitingRoomMessage, setWaitingRoomMessage] = useState("");
+
+  const [waitingRoomRequests, setWaitingRoomRequests] = useState<
+    WaitingRoomRequest[]
+  >([]);
   const [activeVirtualBackground, setActiveVirtualBackground] =
     useState<VirtualBackground>(virtualBackground);
   const [backgroundStatus, setBackgroundStatus] =
@@ -406,13 +432,13 @@ export function useMediasoupRoom(params: {
             const isVideo = data.consumer.kind === "video";
             const isAudio = data.consumer.kind === "audio";
 
-           consumer.on("transportclose", () => {
+            consumer.on("transportclose", () => {
               setRemoteStreams((current) =>
                 current.filter((item) => item.id !== consumer.id),
               );
               consumedProducerIdsRef.current.delete(data.producerId);
             });
-            
+
             setRemoteStreams((current) => [
               ...current.filter((item) => item.producerId !== data.producerId),
               {
@@ -584,7 +610,6 @@ export function useMediasoupRoom(params: {
       const engine = engineRef.current;
 
       if (!engine) {
-
         setActiveVirtualBackground(background);
         return;
       }
@@ -600,7 +625,6 @@ export function useMediasoupRoom(params: {
       try {
         await engine.setBackground(background);
         setActiveVirtualBackground(background);
-
       } catch (err) {
         console.error(
           "[use-mediasoup-room] Failed to apply virtual background",
@@ -622,14 +646,9 @@ export function useMediasoupRoom(params: {
     async (stream: MediaStream | null) => {
       const socket = socketRef.current;
       if (!socket) throw new Error("Socket is not connected.");
-
-      updateParticipant({
-        userId,
-        userName,
-        micOn: !recordingMode,
-        cameraOn: !recordingMode,
-        isHost,
-      });
+      if (roomJoinedRef.current) {
+        return;
+      }
 
       setStatus("Joining room...");
 
@@ -676,6 +695,22 @@ export function useMediasoupRoom(params: {
         );
       }
 
+      const joinedAsHost = Boolean(joinResponse.isHost);
+
+      currentUserIsHostRef.current = joinedAsHost;
+      setIsCurrentUserHost(joinedAsHost);
+
+      updateParticipant({
+        userId,
+        userName,
+        micOn: !recordingMode,
+        cameraOn: !recordingMode,
+        isHost: joinedAsHost,
+      });
+
+      setWaitingRoomStatus(joinedAsHost ? "host" : "admitted");
+      setWaitingRoomMessage("");
+
       for (const participant of normalizeParticipants(
         joinResponse.participants,
       )) {
@@ -713,6 +748,7 @@ export function useMediasoupRoom(params: {
       }
 
       await flushPendingProducers();
+      roomJoinedRef.current = true;
 
       setStatus("Connected");
     },
@@ -730,6 +766,62 @@ export function useMediasoupRoom(params: {
       updateParticipant,
     ],
   );
+
+  const requestWaitingRoomAccess = useCallback(async () => {
+    const socket = socketRef.current;
+
+    if (!socket?.connected) {
+      throw new Error("Meeting socket is not connected.");
+    }
+
+    setWaitingRoomStatus("requesting");
+    setWaitingRoomMessage("Requesting access to the meeting...");
+
+    const response = await new Promise<{
+      success?: boolean;
+      status?: "host" | "pending" | "approved";
+      message?: string;
+      code?: string;
+    }>((resolve) => {
+      socket.emit(
+        "waiting-room:request",
+        {
+          roomId,
+          userId,
+          userName,
+        },
+        resolve,
+      );
+    });
+
+    if (!response?.success) {
+      setWaitingRoomStatus("declined");
+      setWaitingRoomMessage(
+        response?.message || "Unable to request access to this meeting.",
+      );
+
+      throw new Error(
+        response?.message || "Unable to request access to this meeting.",
+      );
+    }
+
+    if (response.status === "host") {
+      setWaitingRoomStatus("host");
+      setWaitingRoomMessage("");
+      await joinAndSetupRoom(localStreamRef.current);
+      return;
+    }
+
+    if (response.status === "approved") {
+      setWaitingRoomStatus("admitted");
+      setWaitingRoomMessage("The host admitted you. Joining meeting...");
+      await joinAndSetupRoom(localStreamRef.current);
+      return;
+    }
+
+    setWaitingRoomStatus("waiting");
+    setWaitingRoomMessage("Waiting for the host to admit you.");
+  }, [roomId, userId, userName, joinAndSetupRoom]);
 
   const connect = useCallback(async () => {
     if (startedRef.current) return;
@@ -780,7 +872,6 @@ export function useMediasoupRoom(params: {
       const hasVideo = cameraStream.getVideoTracks().length > 0;
 
       if (hasVideo && isVirtualBackgroundSupported()) {
-
         const engine = new VirtualBackgroundEngine(cameraStream, {
           onStatusChange: (engineStatus) => {
             setBackgroundStatus(toHookStatus(engineStatus));
@@ -843,9 +934,15 @@ export function useMediasoupRoom(params: {
     socket.on("connect", async () => {
       try {
         setConnected(true);
-        await joinAndSetupRoom(publishedStream);
+
+        if (recordingMode) {
+          await joinAndSetupRoom(publishedStream);
+        } else {
+          await requestWaitingRoomAccess();
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Meeting setup failed.");
+
         setStatus("Failed");
       }
     });
@@ -860,6 +957,90 @@ export function useMediasoupRoom(params: {
       setError(err.message || "Socket connection failed.");
       setStatus("Connection failed");
     });
+
+    socket.on(
+      "waiting-room:status",
+      (payload: { roomId?: string; status?: "pending"; message?: string }) => {
+        if (payload.roomId !== roomId) return;
+
+        setWaitingRoomStatus("waiting");
+        setWaitingRoomMessage(
+          payload.message || "Waiting for the host to admit you.",
+        );
+      },
+    );
+
+    socket.on(
+      "waiting-room:decision",
+      async (payload: {
+        roomId?: string;
+        status?: "approved" | "declined";
+        message?: string;
+      }) => {
+        if (payload.roomId !== roomId) return;
+
+        if (payload.status === "declined") {
+          setWaitingRoomStatus("declined");
+          setWaitingRoomMessage(
+            payload.message || "The host declined your request to join.",
+          );
+          setStatus("Join request declined");
+          return;
+        }
+
+        if (payload.status === "approved") {
+          try {
+            setWaitingRoomStatus("admitted");
+            setWaitingRoomMessage(
+              payload.message || "The host admitted you. Joining meeting...",
+            );
+
+            await joinAndSetupRoom(localStreamRef.current);
+          } catch (err) {
+            setError(
+              err instanceof Error
+                ? err.message
+                : "Unable to join the meeting.",
+            );
+
+            setStatus("Failed");
+          }
+        }
+      },
+    );
+
+    socket.on("waiting-room:request", (request: WaitingRoomRequest) => {
+      if (!currentUserIsHostRef.current || request.roomId !== roomId) {
+        return;
+      }
+
+      setWaitingRoomRequests((current) => [
+        ...current.filter((item) => item.requestId !== request.requestId),
+        request,
+      ]);
+    });
+
+    socket.on(
+      "waiting-room:sync",
+      (payload: { roomId?: string; requests?: WaitingRoomRequest[] }) => {
+        if (!currentUserIsHostRef.current || payload.roomId !== roomId) {
+          return;
+        }
+
+        setWaitingRoomRequests(payload.requests || []);
+      },
+    );
+
+    socket.on(
+      "waiting-room:request-resolved",
+      (payload: { requestId?: string; roomId?: string }) => {
+        if (payload.roomId !== roomId) return;
+
+        setWaitingRoomRequests((current) =>
+          current.filter((request) => request.requestId !== payload.requestId),
+        );
+      },
+    );
 
     socket.on("existing-producers", (producer: ProducerMeta) => {
       consumeProducer(producer).catch((err) => {
@@ -1165,12 +1346,18 @@ export function useMediasoupRoom(params: {
 
     if (socket.connected) {
       setConnected(true);
-      await joinAndSetupRoom(publishedStream);
+
+      if (recordingMode) {
+        await joinAndSetupRoom(publishedStream);
+      } else {
+        await requestWaitingRoomAccess();
+      }
     } else {
       socket.connect();
     }
   }, [
     joinAndSetupRoom,
+    requestWaitingRoomAccess,
     consumeProducer,
     recordingMode,
     recorderSecret,
@@ -1231,7 +1418,14 @@ export function useMediasoupRoom(params: {
 
     setBackgroundStatus("idle");
     setBackgroundError("");
+    roomJoinedRef.current = false;
 
+    currentUserIsHostRef.current = false;
+    setIsCurrentUserHost(false);
+
+    setWaitingRoomStatus("idle");
+    setWaitingRoomMessage("");
+    setWaitingRoomRequests([]);
     closeMeetingSocket();
     startedRef.current = false;
   }, [roomId, userId]);
@@ -1393,7 +1587,7 @@ export function useMediasoupRoom(params: {
       return;
     }
 
-    if (!isHost) {
+    if (!currentUserIsHostRef.current) {
       setRecordingError("Only the host can start recording.");
       return;
     }
@@ -1503,10 +1697,47 @@ export function useMediasoupRoom(params: {
     );
   }
 
+  const respondToWaitingRoomRequest = useCallback(
+    async (requestId: string, decision: "approve" | "decline") => {
+      const socket = socketRef.current;
+
+      if (!socket?.connected) {
+        throw new Error("Meeting socket is not connected.");
+      }
+
+      const response = await new Promise<{
+        success?: boolean;
+        message?: string;
+      }>((resolve) => {
+        socket.emit(
+          "waiting-room:respond",
+          {
+            roomId,
+            requestId,
+            decision,
+          },
+          resolve,
+        );
+      });
+
+      if (!response?.success) {
+        throw new Error(
+          response?.message || "Unable to respond to the join request.",
+        );
+      }
+
+      setWaitingRoomRequests((current) =>
+        current.filter((request) => request.requestId !== requestId),
+      );
+    },
+    [roomId],
+  );
+
   return {
     status,
     error,
     connected,
+    isCurrentUserHost,
     socket,
     localStream,
     remoteStreams,
@@ -1530,6 +1761,10 @@ export function useMediasoupRoom(params: {
     stopRecording,
     recordingStartedAt,
     recordingMode,
+    waitingRoomStatus,
+    waitingRoomMessage,
+    waitingRoomRequests,
+    respondToWaitingRoomRequest,
     joinAndSetupRoom,
     raisedHands,
     toggleHand,

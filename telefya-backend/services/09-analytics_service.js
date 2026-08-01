@@ -2,27 +2,21 @@ const {
   add_meeting_usage_service,
 } = require("./14-billing_service");
 
-const findMeetingForRoom = async (db_query, roomId, userId) => {
+async function findMeetingForRoom(db_query, roomId) {
   const rows = await db_query(
     `
-      SELECT id, des, meeting_url, shedular_user_id
+      SELECT id, room_id, des, meeting_url, shedular_user_id
       FROM meeting_schedules
-      WHERE shedular_user_id = ?
-      AND (
-        id = ?
-        OR meeting_url LIKE ?
-        OR meeting_url LIKE ?
-      )
-      ORDER BY id DESC
+      WHERE room_id = ?
       LIMIT 1
     `,
-    [userId, roomId, `%/${roomId}%`, `%roomId=${roomId}%`],
+    [roomId],
   );
 
   return rows?.[0] || null;
-};
+}
 
-const getAttendanceBillingRow = async (db_query, attendanceId) => {
+async function getAttendanceBillingRow(db_query, attendanceId) {
   if (!attendanceId) return null;
 
   const rows = await db_query(
@@ -37,7 +31,8 @@ const getAttendanceBillingRow = async (db_query, attendanceId) => {
         a.duration_minutes,
         m.shedular_user_id AS meeting_owner_id
       FROM meeting_attendance a
-      LEFT JOIN meeting_schedules m ON m.id = a.meeting_id
+      LEFT JOIN meeting_schedules m
+        ON m.id = a.meeting_id OR m.room_id = a.room_id
       WHERE a.id = ?
       LIMIT 1
     `,
@@ -45,47 +40,58 @@ const getAttendanceBillingRow = async (db_query, attendanceId) => {
   );
 
   return rows?.[0] || null;
-};
+}
 
-const recordMeetingUsageForAttendance = async (db_query, attendanceId) => {
+async function recordMeetingUsageForAttendance(db_query, attendanceId) {
   try {
-    const attendance = await getAttendanceBillingRow(db_query, attendanceId);
+    const attendance = await getAttendanceBillingRow(
+      db_query,
+      attendanceId,
+    );
 
     if (!attendance) return;
 
     const durationMinutes = Number(attendance.duration_minutes || 0);
-    if (durationMinutes <= 0) return;
+    const hostUserId = String(attendance.meeting_owner_id || "");
+    const attendeeUserId = String(attendance.user_id || "");
 
-    const billableUserId =
-      attendance.meeting_owner_id || attendance.user_id || null;
+    // Only the host's own attendance contributes to the host's plan usage.
+    // Guest attendance must never multiply a host's used meeting minutes.
+    if (
+      durationMinutes <= 0 ||
+      !hostUserId ||
+      hostUserId !== attendeeUserId
+    ) {
+      return;
+    }
 
-    if (!billableUserId) return;
-
-    await add_meeting_usage_service(db_query, billableUserId, durationMinutes);
+    await add_meeting_usage_service(
+      db_query,
+      hostUserId,
+      durationMinutes,
+    );
   } catch (error) {
-    console.error("[Analytics billing usage] Unable to record meeting usage:", {
+    console.error("[Analytics] Unable to record meeting usage:", {
       attendanceId,
       message: error?.message,
     });
   }
-};
+}
 
 const start_attendance_service = async (db_query, data) => {
-  const { roomId, userId, userName, meetingId } = data;
+  const { roomId, userId, userName } = data;
 
   if (!roomId || !userId) return null;
 
-  const meeting = meetingId
-    ? { id: meetingId }
-    : await findMeetingForRoom(db_query, roomId, userId);
+  const meeting = await findMeetingForRoom(db_query, roomId);
 
   const openRows = await db_query(
     `
       SELECT id
       FROM meeting_attendance
       WHERE room_id = ?
-      AND user_id = ?
-      AND left_at IS NULL
+        AND user_id = ?
+        AND left_at IS NULL
     `,
     [roomId, userId],
   );
@@ -93,11 +99,15 @@ const start_attendance_service = async (db_query, data) => {
   await db_query(
     `
       UPDATE meeting_attendance
-      SET left_at = NOW(),
-          duration_minutes = GREATEST(TIMESTAMPDIFF(MINUTE, joined_at, NOW()), 0)
+      SET
+        left_at = NOW(),
+        duration_minutes = GREATEST(
+          TIMESTAMPDIFF(MINUTE, joined_at, NOW()),
+          0
+        )
       WHERE room_id = ?
-      AND user_id = ?
-      AND left_at IS NULL
+        AND user_id = ?
+        AND left_at IS NULL
     `,
     [roomId, userId],
   );
@@ -109,10 +119,21 @@ const start_attendance_service = async (db_query, data) => {
   const result = await db_query(
     `
       INSERT INTO meeting_attendance
-      (room_id, meeting_id, user_id, user_name, joined_at)
+      (
+        room_id,
+        meeting_id,
+        user_id,
+        user_name,
+        joined_at
+      )
       VALUES (?, ?, ?, ?, NOW())
     `,
-    [roomId, meeting?.id || null, userId, userName || "Telefya user"],
+    [
+      roomId,
+      meeting?.id || null,
+      userId,
+      userName || "Telefya user",
+    ],
   );
 
   return result.insertId;
@@ -125,16 +146,19 @@ const finish_attendance_service = async (db_query, data) => {
     await db_query(
       `
         UPDATE meeting_attendance
-        SET left_at = NOW(),
-            duration_minutes = GREATEST(TIMESTAMPDIFF(MINUTE, joined_at, NOW()), 0)
+        SET
+          left_at = NOW(),
+          duration_minutes = GREATEST(
+            TIMESTAMPDIFF(MINUTE, joined_at, NOW()),
+            0
+          )
         WHERE id = ?
-        AND left_at IS NULL
+          AND left_at IS NULL
       `,
       [attendanceId],
     );
 
     await recordMeetingUsageForAttendance(db_query, attendanceId);
-
     return true;
   }
 
@@ -145,8 +169,8 @@ const finish_attendance_service = async (db_query, data) => {
       SELECT id
       FROM meeting_attendance
       WHERE room_id = ?
-      AND user_id = ?
-      AND left_at IS NULL
+        AND user_id = ?
+        AND left_at IS NULL
       ORDER BY joined_at DESC
       LIMIT 1
     `,
@@ -158,11 +182,15 @@ const finish_attendance_service = async (db_query, data) => {
   await db_query(
     `
       UPDATE meeting_attendance
-      SET left_at = NOW(),
-          duration_minutes = GREATEST(TIMESTAMPDIFF(MINUTE, joined_at, NOW()), 0)
+      SET
+        left_at = NOW(),
+        duration_minutes = GREATEST(
+          TIMESTAMPDIFF(MINUTE, joined_at, NOW()),
+          0
+        )
       WHERE room_id = ?
-      AND user_id = ?
-      AND left_at IS NULL
+        AND user_id = ?
+        AND left_at IS NULL
       ORDER BY joined_at DESC
       LIMIT 1
     `,
@@ -170,7 +198,10 @@ const finish_attendance_service = async (db_query, data) => {
   );
 
   if (targetAttendanceId) {
-    await recordMeetingUsageForAttendance(db_query, targetAttendanceId);
+    await recordMeetingUsageForAttendance(
+      db_query,
+      targetAttendanceId,
+    );
   }
 
   return true;
@@ -189,29 +220,37 @@ const get_analytics_summary_service = async (db_query, userId) => {
   const attendance = await db_query(
     `
       SELECT
-        COUNT(a.id) AS total_attendees,
-        COALESCE(SUM(a.duration_minutes), 0) AS total_minutes
-      FROM meeting_attendance a
-      LEFT JOIN meeting_schedules m ON m.id = a.meeting_id
-      WHERE a.user_id = ? OR m.shedular_user_id = ?
+        COUNT(DISTINCT CASE
+          WHEN a.user_id <> m.shedular_user_id THEN a.user_id
+          ELSE NULL
+        END) AS total_attendees,
+        COALESCE(
+          SUM(
+            CASE
+              WHEN a.user_id = m.shedular_user_id
+              THEN a.duration_minutes
+              ELSE 0
+            END
+          ),
+          0
+        ) AS total_minutes
+      FROM meeting_schedules m
+      LEFT JOIN meeting_attendance a
+        ON a.meeting_id = m.id OR a.room_id = m.room_id
+      WHERE m.shedular_user_id = ?
     `,
-    [userId, userId],
+    [userId],
   );
 
-  let recordings = [{ recordings: 0 }];
-
-  try {
-    recordings = await db_query(
-      `
-        SELECT COUNT(*) AS recordings
-        FROM video_recordings
-        WHERE host_id = ? OR user_id = ?
-      `,
-      [userId, userId],
-    );
-  } catch {
-    recordings = [{ recordings: 0 }];
-  }
+  const recordings = await db_query(
+    `
+      SELECT COUNT(*) AS recordings
+      FROM meeting_recordings
+      WHERE host_user_id = ?
+        AND status <> 'deleted'
+    `,
+    [userId],
+  );
 
   return {
     success: true,
@@ -236,14 +275,16 @@ const list_attendance_reports_service = async (db_query, userId) => {
         a.joined_at,
         a.left_at,
         a.duration_minutes
-      FROM meeting_attendance a
-      LEFT JOIN meeting_schedules m ON m.id = a.meeting_id
-      LEFT JOIN users u ON u.user_id = a.user_id
-      WHERE a.user_id = ? OR m.shedular_user_id = ?
+      FROM meeting_schedules m
+      INNER JOIN meeting_attendance a
+        ON a.meeting_id = m.id OR a.room_id = m.room_id
+      LEFT JOIN users u
+        ON u.user_id = a.user_id
+      WHERE m.shedular_user_id = ?
       ORDER BY a.joined_at DESC
       LIMIT 500
     `,
-    [userId, userId],
+    [userId],
   );
 
   return {

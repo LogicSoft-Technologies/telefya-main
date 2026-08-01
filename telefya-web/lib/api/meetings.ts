@@ -1,10 +1,21 @@
 import { apiRequest } from "@/lib/api/client";
 
+export type MeetingStatus =
+  | "upcoming"
+  | "live"
+  | "ended"
+  | "cancelled";
+
 export type ScheduledMeeting = {
   id: number | string;
   meeting_url: string;
+  room_id: string;
   shedular_user_id: string;
   time_zone: string;
+  scheduled_for: string;
+  status: MeetingStatus;
+  started_at?: string | null;
+  ended_at?: string | null;
   des?: string;
   created_at?: string;
   updated_at?: string;
@@ -17,9 +28,12 @@ type MeetingsResponse = {
 };
 
 export async function getMeetings() {
-  const response = await apiRequest<MeetingsResponse>("/user/get-meeting", {
-    method: "GET",
-  });
+  const response = await apiRequest<MeetingsResponse>(
+    "/user/get-meeting",
+    {
+      method: "GET",
+    },
+  );
 
   return Array.isArray(response.data) ? response.data : [];
 }
@@ -33,19 +47,16 @@ export async function scheduleMeeting(payload: {
   return apiRequest<{
     success: boolean;
     message: string;
-    data: {
-      meeting_url: string;
-      time_zone: string;
-      shedular_user_id?: string;
-      des?: string;
-    };
+    data: ScheduledMeeting;
   }>("/user/schedule-meeting", {
     method: "POST",
     body: JSON.stringify(payload),
   });
 }
 
-export async function deleteMeetings(meetingIds: Array<string | number>) {
+export async function deleteMeetings(
+  meetingIds: Array<string | number>,
+) {
   return apiRequest<{
     success: boolean;
     message: string;

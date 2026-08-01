@@ -1,6 +1,7 @@
 const path = require("path");
 const crypto = require("crypto");
 const { chromium } = require("playwright");
+const fs = require("fs/promises");
 
 const RECORDINGS_DIR = process.env.RECORDINGS_DIR
   ? path.resolve(process.env.RECORDINGS_DIR)
@@ -104,6 +105,16 @@ async function start_browser_recording_service({
       message: "roomId is required.",
     };
   }
+
+  if (!hostUserId) {
+    return {
+      success: false,
+      error: true,
+      message: "Only the meeting host can start a recording.",
+    };
+  }
+
+  await fs.mkdir(RECORDINGS_DIR, { recursive: true });
 
   const existing = activeRecorders.get(roomId);
 

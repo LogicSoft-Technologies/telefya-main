@@ -5,7 +5,12 @@ const RECORDINGS_DIR = process.env.RECORDINGS_DIR
   ? path.resolve(process.env.RECORDINGS_DIR)
   : path.join(process.cwd(), "recordings");
 
-const VIDEO_EXTENSIONS = new Set([".webm", ".mp4", ".mkv", ".mov"]);
+const VIDEO_EXTENSIONS = new Set([
+  ".webm",
+  ".mp4",
+  ".mkv",
+  ".mov",
+]);
 
 async function pathExists(filePath) {
   try {
@@ -14,6 +19,24 @@ async function pathExists(filePath) {
   } catch {
     return false;
   }
+}
+
+function isManagedRecordingPath(filePath) {
+  if (!filePath) return false;
+
+  const resolvedDirectory = path.resolve(RECORDINGS_DIR);
+  const resolvedFilePath = path.resolve(filePath);
+  const relativePath = path.relative(
+    resolvedDirectory,
+    resolvedFilePath,
+  );
+
+  return Boolean(
+    relativePath &&
+      !relativePath.startsWith(`..${path.sep}`) &&
+      relativePath !== ".." &&
+      !path.isAbsolute(relativePath),
+  );
 }
 
 function normalizeMeetingRecording(row) {
@@ -26,10 +49,10 @@ function normalizeMeetingRecording(row) {
     title: row.title || row.room_id || "Telefya recording",
     status: row.status || "processing",
     file_name: row.file_name || null,
-    file_path: row.file_path || null,
+    file_path: null,
     mime_type: row.mime_type || "video/mp4",
-    size_bytes: row.size_bytes || 0,
-    duration_seconds: row.duration_seconds || 0,
+    size_bytes: Number(row.size_bytes || 0),
+    duration_seconds: Number(row.duration_seconds || 0),
     started_at: row.started_at || row.created_at || null,
     stopped_at: row.stopped_at || null,
     expires_at: row.expires_at || null,
@@ -37,112 +60,100 @@ function normalizeMeetingRecording(row) {
   };
 }
 
-async function listRecordingFiles() {
-  if (!(await pathExists(RECORDINGS_DIR))) return [];
-
-  const files = await fs.readdir(RECORDINGS_DIR, { withFileTypes: true });
-  const recordings = [];
-
-  for (const file of files) {
-    if (!file.isFile()) continue;
-
-    const ext = path.extname(file.name).toLowerCase();
-    if (!VIDEO_EXTENSIONS.has(ext)) continue;
-
-    const filePath = path.join(RECORDINGS_DIR, file.name);
-    const stat = await fs.stat(filePath);
-    const id = path.parse(file.name).name;
-
-    recordings.push({
-      id,
-      recording_id: id,
-      title: id.replace(/[-_]/g, " "),
-      room_id: null,
-      meeting_id: null,
-      host_user_id: null,
-      status: "ready",
-      file_name: file.name,
-      file_path: filePath,
-      mime_type: ext === ".mp4" ? "video/mp4" : "video/webm",
-      duration_seconds: 0,
-      size_bytes: stat.size,
-      started_at: stat.birthtime,
-      stopped_at: stat.mtime,
-      expires_at: null,
-      created_at: stat.birthtime,
-    });
+async function findRecordingFile(fileNameOrId) {
+  if (!fileNameOrId || !(await pathExists(RECORDINGS_DIR))) {
+    return null;
   }
 
-  return recordings.sort(
-    (a, b) =>
-      new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-  );
+  const files = await fs.readdir(RECORDINGS_DIR);
+
+  const match = files.find((file) => {
+    const extension = path.extname(file).toLowerCase();
+    const id = path.parse(file).name;
+
+    return (
+      VIDEO_EXTENSIONS.has(extension) &&
+      (id === fileNameOrId || file === fileNameOrId)
+    );
+  });
+
+  if (!match) return null;
+
+  const filePath = path.resolve(RECORDINGS_DIR, match);
+
+  if (!isManagedRecordingPath(filePath)) {
+    return null;
+  }
+
+  return {
+    filePath,
+    fileName: match,
+  };
 }
 
 async function list_recordings_service(db_query, userId) {
   const rows = await db_query(
     `
-      SELECT *
+      SELECT
+        id,
+        recording_id,
+        room_id,
+        meeting_id,
+        host_user_id,
+        title,
+        CASE
+          WHEN expires_at IS NOT NULL
+            AND expires_at <= NOW()
+            AND status = 'ready'
+          THEN 'expired'
+          ELSE status
+        END AS status,
+        file_name,
+        mime_type,
+        size_bytes,
+        duration_seconds,
+        started_at,
+        stopped_at,
+        expires_at,
+        created_at
       FROM meeting_recordings
       WHERE host_user_id = ?
-      AND status <> 'deleted'
+        AND status <> 'deleted'
       ORDER BY COALESCE(started_at, created_at) DESC
       LIMIT 200
     `,
     [userId],
   );
 
-  if (rows?.length) {
-    return {
-      success: true,
-      message: "Recordings retrieved successfully.",
-      data: rows.map(normalizeMeetingRecording),
-    };
-  }
-
   return {
     success: true,
     message: "Recordings retrieved successfully.",
-    data: [],
+    data: (rows || []).map(normalizeMeetingRecording),
   };
 }
 
-async function findRecordingFile(recordingId) {
-  if (!recordingId) return null;
-  if (!(await pathExists(RECORDINGS_DIR))) return null;
-
-  const files = await fs.readdir(RECORDINGS_DIR);
-
-  const match = files.find((file) => {
-    const ext = path.extname(file).toLowerCase();
-    const id = path.parse(file).name;
-
-    return VIDEO_EXTENSIONS.has(ext) && (id === recordingId || file === recordingId);
-  });
-
-  if (!match) return null;
-
-  const filePath = path.join(RECORDINGS_DIR, match);
-  const resolved = path.resolve(filePath);
-
-  if (!resolved.startsWith(path.resolve(RECORDINGS_DIR))) {
-    return null;
-  }
-
-  return {
-    filePath: resolved,
-    fileName: match,
-  };
-}
-
-async function get_recording_file_service(db_query, userId, recordingId) {
+async function get_recording_file_service(
+  db_query,
+  userId,
+  recordingId,
+) {
   const rows = await db_query(
     `
-      SELECT *
+      SELECT
+        recording_id,
+        host_user_id,
+        status,
+        file_name,
+        file_path,
+        mime_type,
+        expires_at
       FROM meeting_recordings
       WHERE recording_id = ?
-      AND host_user_id = ?
-      AND status = 'ready'
+        AND host_user_id = ?
+        AND status = 'ready'
+        AND (
+          expires_at IS NULL OR expires_at > NOW()
+        )
       LIMIT 1
     `,
     [recordingId, userId],
@@ -150,33 +161,48 @@ async function get_recording_file_service(db_query, userId, recordingId) {
 
   const row = rows?.[0];
 
-  if (row?.file_path) {
-    const filePath = path.resolve(row.file_path);
-
-    if (await pathExists(filePath)) {
-      return {
-        filePath,
-        fileName: row.file_name || path.basename(filePath),
-      };
-    }
+  if (!row) {
+    return null;
   }
 
-  if (row?.file_name) {
-    const file = await findRecordingFile(row.file_name);
-    if (file) return file;
+  if (
+    row.file_path &&
+    isManagedRecordingPath(row.file_path) &&
+    (await pathExists(row.file_path))
+  ) {
+    return {
+      filePath: path.resolve(row.file_path),
+      fileName: row.file_name || path.basename(row.file_path),
+      mimeType: row.mime_type || "video/mp4",
+    };
   }
 
-  return findRecordingFile(recordingId);
+  const fallbackFile = await findRecordingFile(
+    row.file_name || recordingId,
+  );
+
+  if (!fallbackFile) {
+    return null;
+  }
+
+  return {
+    ...fallbackFile,
+    mimeType: row.mime_type || "video/mp4",
+  };
 }
 
-async function delete_recording_service(db_query, userId, recordingId) {
+async function delete_recording_service(
+  db_query,
+  userId,
+  recordingId,
+) {
   const rows = await db_query(
     `
-      SELECT *
+      SELECT recording_id, file_path
       FROM meeting_recordings
       WHERE recording_id = ?
-      AND host_user_id = ?
-      AND status <> 'deleted'
+        AND host_user_id = ?
+        AND status <> 'deleted'
       LIMIT 1
     `,
     [recordingId, userId],
@@ -192,29 +218,36 @@ async function delete_recording_service(db_query, userId, recordingId) {
     };
   }
 
-  if (row.file_path) {
-    const filePath = path.resolve(row.file_path);
-
-    if (await pathExists(filePath)) {
-      try {
-        await fs.unlink(filePath);
-      } catch {}
+  if (
+    row.file_path &&
+    isManagedRecordingPath(row.file_path) &&
+    (await pathExists(row.file_path))
+  ) {
+    try {
+      await fs.unlink(row.file_path);
+    } catch (error) {
+      console.error("[Recording] File deletion failed:", {
+        recordingId,
+        message: error?.message,
+      });
     }
   }
 
   await db_query(
     `
       UPDATE meeting_recordings
-      SET status = 'deleted',
-          file_path = NULL
+      SET
+        status = 'deleted',
+        file_path = NULL
       WHERE recording_id = ?
-      AND host_user_id = ?
+        AND host_user_id = ?
     `,
     [recordingId, userId],
   );
 
   return {
     success: true,
+    error: false,
     message: "Recording deleted successfully.",
   };
 }

@@ -30,24 +30,32 @@ export type MeetingRecording = {
 type ApiResponse<T> = {
   success: boolean;
   message?: string;
-  data: T;
+  data?: T;
   status?: number;
 };
 
 const API_DOWNLOAD_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL || "/api/backend";
 
-export function listRecordings() {
-  return apiRequest<ApiResponse<MeetingRecording[]>>("/user/recordings", {
-    method: "GET",
-  });
+export async function listRecordings() {
+  const response = await apiRequest<ApiResponse<MeetingRecording[]>>(
+    "/user/recordings",
+    { method: "GET" },
+  );
+
+  return {
+    ...response,
+    data: Array.isArray(response.data) ? response.data : [],
+  };
 }
 
 export async function getRecording(recordingId: string) {
   const response = await listRecordings();
+
   const recording = response.data.find(
     (item) =>
-      String(item.recording_id) === recordingId || String(item.id) === recordingId
+      String(item.recording_id) === String(recordingId) ||
+      String(item.id) === String(recordingId),
   );
 
   if (!recording) {
@@ -64,10 +72,33 @@ export async function getRecording(recordingId: string) {
 export function deleteRecording(recordingId: string) {
   return apiRequest<ApiResponse<null>>(
     `/user/recordings/${encodeURIComponent(recordingId)}`,
-    {
-      method: "DELETE",
-    }
+    { method: "DELETE" },
   );
+}
+
+function getDownloadFileName(
+  contentDisposition: string | null,
+  fallback: string,
+) {
+  if (!contentDisposition) return fallback;
+
+  const utf8Match = contentDisposition.match(
+    /filename\*=UTF-8''([^;]+)/i,
+  );
+
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return utf8Match[1];
+    }
+  }
+
+  const fileNameMatch = contentDisposition.match(
+    /filename="?([^";]+)"?/i,
+  );
+
+  return fileNameMatch?.[1]?.trim() || fallback;
 }
 
 export async function downloadRecording(recordingId: string) {
@@ -80,10 +111,10 @@ export async function downloadRecording(recordingId: string) {
     `${API_DOWNLOAD_BASE}/user/recordings/${encodeURIComponent(recordingId)}`,
     {
       method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    }
+      headers: token
+        ? { Authorization: `Bearer ${token}` }
+        : undefined,
+    },
   );
 
   if (!response.ok) {
@@ -93,19 +124,20 @@ export async function downloadRecording(recordingId: string) {
       const payload = await response.json();
       message = payload?.message || message;
     } catch {
-      // File download endpoint may not return JSON.
+      // A file endpoint may return no JSON error body.
     }
 
     throw new Error(message);
   }
 
   const blob = await response.blob();
-  const disposition = response.headers.get("content-disposition");
-  const match = disposition?.match(/filename="?([^"]+)"?/i);
 
   return {
     blob,
-    fileName: match?.[1] || `telefya-recording-${recordingId}.mp4`,
+    fileName: getDownloadFileName(
+      response.headers.get("content-disposition"),
+      `telefya-recording-${recordingId}.mp4`,
+    ),
   };
 }
 
@@ -116,7 +148,9 @@ export async function saveRecordingToDevice(recordingId: string) {
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = fileName;
+  document.body.appendChild(anchor);
   anchor.click();
+  anchor.remove();
 
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }

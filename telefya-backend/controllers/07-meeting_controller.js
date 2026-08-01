@@ -9,8 +9,31 @@ const {
   get_current_subscription_service,
 } = require("../services/14-billing_service");
 
-const getAuthenticatedUserId = (req) =>
-  getUserId(req.user) || req.user?.user || req.user?.id || req.user?.userId;
+const getAuthenticatedUserId = (req) => {
+  const embeddedUser = req.user?.user;
+
+  const candidates = [
+    embeddedUser?.user_id,
+    embeddedUser?.id,
+    embeddedUser?.userId,
+    typeof embeddedUser === "string" ||
+    typeof embeddedUser === "number"
+      ? embeddedUser
+      : null,
+    req.user?.user_id,
+    req.user?.id,
+    req.user?.userId,
+  ];
+
+  const userId = candidates.find(
+    (value) =>
+      value !== undefined &&
+      value !== null &&
+      String(value).trim(),
+  );
+
+  return userId ? String(userId).trim() : "";
+};
 
 function unauthorized(res) {
   return res.status(401).json({

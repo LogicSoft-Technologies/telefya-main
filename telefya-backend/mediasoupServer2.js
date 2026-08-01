@@ -69,6 +69,7 @@ async function saveRoomToRedis(roomId) {
 
     await pubClient.hSet(`room:${roomId}`, {
       routerId: room.router.id,
+      hostUserId: room.hostUserId || "",
       peers: JSON.stringify(peersObj),
       screenSharingUser: room.screenSharingUser || "",
       updatedAt: String(Date.now()),
@@ -173,7 +174,9 @@ function getExistingProducers(room) {
 }
 
 async function createRoom(roomId) {
-  if (!roomId) throw new Error("roomId is required");
+  if (!roomId) {
+    throw new Error("roomId is required");
+  }
 
   if (!worker) {
     throw new Error("mediasoup worker is not initialized");
@@ -183,31 +186,68 @@ async function createRoom(roomId) {
     return rooms.get(roomId);
   }
 
-  const router = await worker.createRouter(config.mediasoup.router);
+  const router = await worker.createRouter(
+    config.mediasoup.router,
+  );
 
   const room = {
     router,
     peers: new Map(),
+    hostUserId: null,
     screenSharingUser: undefined,
     createdAt: Date.now(),
   };
 
   rooms.set(roomId, room);
+
   await saveRoomToRedis(roomId);
 
   return room;
 }
 
-async function joinRoom(socket, roomId, userId, userName = "", isHost = false) {
-  if (!roomId) throw new Error("roomId is required");
-  if (!userId) throw new Error("userId is required");
+async function joinRoom(
+  socket,
+  roomId,
+  userId,
+  userName = "",
+  isHost = false,
+) {
+  if (!roomId) {
+    throw new Error("roomId is required");
+  }
+
+  if (!userId) {
+    throw new Error("userId is required");
+  }
 
   const room = await createRoom(roomId);
+  const normalizedUserId = String(userId);
 
-  const hasHost = Array.from(room.peers.values()).some((peer) => peer.isHost);
-  const shouldBeHost = Boolean(isHost || !hasHost);
+  // A room never promotes the first guest to host automatically.
+  // The socket layer will verify whether isHost is legitimate.
+  const isKnownHost =
+    room.hostUserId &&
+    String(room.hostUserId) === normalizedUserId;
 
-  const existingPeer = room.peers.get(userId);
+  const canClaimEmptyRoomAsHost =
+    !room.hostUserId && Boolean(isHost);
+
+  const shouldBeHost = Boolean(
+    isKnownHost || canClaimEmptyRoomAsHost,
+  );
+
+  if (Boolean(isHost) && !shouldBeHost) {
+    throw new Error(
+      "This room already has a different host.",
+    );
+  }
+
+  if (shouldBeHost) {
+    room.hostUserId = normalizedUserId;
+  }
+
+  const existingPeer = room.peers.get(normalizedUserId);
+
   if (existingPeer) {
     closePeerMedia(existingPeer);
   }
@@ -217,16 +257,16 @@ async function joinRoom(socket, roomId, userId, userName = "", isHost = false) {
     producers: new Map(),
     consumers: new Map(),
     userName,
-    userId,
+    userId: normalizedUserId,
     isHost: shouldBeHost,
     rtpCapabilities: null,
     joinedAt: Date.now(),
   };
 
-  room.peers.set(userId, peer);
+  room.peers.set(normalizedUserId, peer);
 
   socket.data.roomId = roomId;
-  socket.data.userId = userId;
+  socket.data.userId = normalizedUserId;
   socket.data.userName = userName;
   socket.data.isHost = shouldBeHost;
 
@@ -236,7 +276,8 @@ async function joinRoom(socket, roomId, userId, userName = "", isHost = false) {
     rtpCapabilities: room.router.rtpCapabilities,
     isHost: shouldBeHost,
     existingProducers: getSerializableProducers(room).filter(
-      (producer) => producer.userId !== userId
+      (producer) =>
+        String(producer.userId) !== normalizedUserId,
     ),
   };
 }
@@ -263,7 +304,10 @@ async function createTransport(roomId, userId) {
     try {
       await transport.setMaxIncomingBitrate(maxIncomingBitrate);
     } catch (err) {
-      console.warn("[mediasoup] Could not set max incoming bitrate:", err.message);
+      console.warn(
+        "[mediasoup] Could not set max incoming bitrate:",
+        err.message,
+      );
     }
   }
 
@@ -303,7 +347,10 @@ async function connectTransport(roomId, userId, transportId, dtlsParameters) {
   const transport = peer.transports.get(transportId);
   if (!transport) throw new Error("Transport not found");
 
-  if (transport.dtlsState === "connected" || transport.dtlsState === "connecting") {
+  if (
+    transport.dtlsState === "connected" ||
+    transport.dtlsState === "connecting"
+  ) {
     return;
   }
 
@@ -388,7 +435,7 @@ async function consume(
   transportId,
   producerId,
   rtpCapabilities,
-  appData = {}
+  appData = {},
 ) {
   const room = rooms.get(roomId);
   if (!room) throw new Error("Room not found");
@@ -578,7 +625,10 @@ async function savePeerRtpCapabilities(roomId, userId, rtpCapabilities) {
   await saveRoomToRedis(roomId);
 }
 
-async function startRecording(socket, { roomId, userId, userName, meetingUrl }) {
+async function startRecording(
+  socket,
+  { roomId, userId, userName, meetingUrl },
+) {
   if (!browserRecorder) {
     browserRecorder = new BrowserRecorder();
   }
@@ -610,7 +660,7 @@ async function startRecording(socket, { roomId, userId, userName, meetingUrl }) 
         userName,
         startTime: result.startTime,
         timestamp: Date.now(),
-      })
+      }),
     );
   }
 
@@ -649,7 +699,7 @@ async function stopRecording(socket, { roomId, recordingId } = {}) {
         duration: result.duration,
         success: result.success,
         timestamp: Date.now(),
-      })
+      }),
     );
   }
 

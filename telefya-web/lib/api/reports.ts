@@ -8,33 +8,47 @@ export type ReportSummary = {
 };
 
 export type AttendanceReport = {
-  id: string;
+  id: string | number;
   meeting_title: string;
   attendee_name: string;
-  attendee_email?: string;
-  joined_at?: string;
-  left_at?: string;
+  attendee_email?: string | null;
+  joined_at?: string | null;
+  left_at?: string | null;
   duration_minutes?: number;
 };
 
 type ApiResponse<T> = {
   success: boolean;
   message?: string;
-  data: T;
+  data?: T;
   status?: number;
 };
 
-export function getReportSummary() {
-  return apiRequest<ApiResponse<ReportSummary>>("/user/analytics/summary", {
-    method: "GET",
-  });
+export async function getReportSummary() {
+  const response = await apiRequest<ApiResponse<ReportSummary>>(
+    "/user/analytics/summary",
+    { method: "GET" },
+  );
+
+  return {
+    ...response,
+    data: response.data ?? {
+      total_meetings: 0,
+      total_attendees: 0,
+      total_minutes: 0,
+      recordings: 0,
+    },
+  };
 }
 
-export function listAttendanceReports() {
-  return apiRequest<ApiResponse<AttendanceReport[]>>(
+export async function listAttendanceReports() {
+  const response = await apiRequest<ApiResponse<AttendanceReport[]>>(
     "/user/analytics/attendance",
-    {
-      method: "GET",
-    }
+    { method: "GET" },
   );
+
+  return {
+    ...response,
+    data: Array.isArray(response.data) ? response.data : [],
+  };
 }

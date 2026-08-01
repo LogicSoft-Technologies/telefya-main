@@ -3,12 +3,60 @@ const cleanString = (value, fallback = "") => {
   return String(value).trim();
 };
 
+function toMysqlDateTime(date) {
+  return date.toISOString().slice(0, 19).replace("T", " ");
+}
+
+function parseScheduledDate(value) {
+  const date = new Date(cleanString(value));
+
+  if (Number.isNaN(date.getTime())) {
+    throw new Error("Please provide a valid meeting date and time.");
+  }
+
+  if (date.getTime() < Date.now() - 60_000) {
+    throw new Error("A meeting cannot be scheduled in the past.");
+  }
+
+  return date;
+}
+
+function getRoomId(meetingUrl) {
+  const rawUrl = cleanString(meetingUrl);
+
+  if (!rawUrl) {
+    throw new Error("Meeting link is required.");
+  }
+
+  let pathname = rawUrl;
+
+  try {
+    pathname = new URL(rawUrl).pathname;
+  } catch {
+    pathname = rawUrl.split("?")[0];
+  }
+
+  const parts = pathname
+    .split("/")
+    .map((part) => decodeURIComponent(part).trim())
+    .filter(Boolean);
+
+  const liveIndex = parts.lastIndexOf("live");
+  const roomId =
+    liveIndex >= 0 ? parts[liveIndex + 1] : parts.at(-1);
+
+  if (!/^[a-zA-Z0-9_-]{3,120}$/.test(roomId || "")) {
+    throw new Error("Meeting link does not contain a valid room ID.");
+  }
+
+  return roomId;
+}
+
 const schedule_meeting_service = async (db_query, payload) => {
   const { date, timeZone, path, user_id, des } = payload;
 
   const userId = cleanString(user_id);
   const meetingUrl = cleanString(path);
-  const meetingDate = cleanString(date);
   const meetingTimeZone = cleanString(timeZone);
   const description = cleanString(des, "Telefya meeting");
 
@@ -16,30 +64,53 @@ const schedule_meeting_service = async (db_query, payload) => {
     throw new Error("Authenticated user is required.");
   }
 
-  if (!meetingTimeZone || !meetingUrl || !meetingDate) {
-    throw new Error("Timezone, date and meeting url are required.");
+  if (!meetingTimeZone || !meetingUrl || !date) {
+    throw new Error(
+      "Timezone, date and meeting link are required.",
+    );
   }
+
+  const scheduledDate = parseScheduledDate(date);
+  const roomId = getRoomId(meetingUrl);
 
   const meeting = {
     meeting_url: meetingUrl,
-    time_zone: `${meetingDate} ${meetingTimeZone}`,
+    room_id: roomId,
+    time_zone: meetingTimeZone,
+    scheduled_for: toMysqlDateTime(scheduledDate),
     shedular_user_id: userId,
     des: description,
+    status: "upcoming",
+    started_at: null,
+    ended_at: null,
   };
 
-  const query = `
-    INSERT INTO meeting_schedules (meeting_url, time_zone, shedular_user_id, des)
-    VALUES (?, ?, ?, ?)
-  `;
+  const result = await db_query(
+    `
+      INSERT INTO meeting_schedules
+      (
+        meeting_url,
+        room_id,
+        time_zone,
+        scheduled_for,
+        shedular_user_id,
+        des,
+        status
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `,
+    [
+      meeting.meeting_url,
+      meeting.room_id,
+      meeting.time_zone,
+      meeting.scheduled_for,
+      meeting.shedular_user_id,
+      meeting.des,
+      meeting.status,
+    ],
+  );
 
-  const result = await db_query(query, [
-    meeting.meeting_url,
-    meeting.time_zone,
-    meeting.shedular_user_id,
-    meeting.des,
-  ]);
-
-  if (result.affectedRows === 0) {
+  if (!result.affectedRows) {
     throw new Error("Failed to schedule the meeting.");
   }
 
@@ -47,7 +118,10 @@ const schedule_meeting_service = async (db_query, payload) => {
     success: true,
     error: false,
     message: "Meeting scheduled successfully.",
-    data: meeting,
+    data: {
+      id: result.insertId,
+      ...meeting,
+    },
   };
 };
 
@@ -58,14 +132,35 @@ const get_meeting_service = async (db_query, user_id) => {
     throw new Error("Authenticated user is required.");
   }
 
-  const query = `
-    SELECT *
-    FROM meeting_schedules
-    WHERE shedular_user_id = ?
-    ORDER BY created_at DESC
-  `;
-
-  const result = await db_query(query, [userId]);
+  const result = await db_query(
+    `
+      SELECT
+        id,
+        meeting_url,
+        room_id,
+        des,
+        shedular_user_id,
+        time_zone,
+        scheduled_for,
+        status,
+        started_at,
+        ended_at,
+        created_at,
+        updated_at
+      FROM meeting_schedules
+      WHERE shedular_user_id = ?
+      ORDER BY
+        CASE status
+          WHEN 'upcoming' THEN 0
+          WHEN 'live' THEN 1
+          WHEN 'ended' THEN 2
+          ELSE 3
+        END ASC,
+        scheduled_for ASC,
+        created_at DESC
+    `,
+    [userId],
+  );
 
   return {
     success: true,
@@ -76,7 +171,9 @@ const get_meeting_service = async (db_query, user_id) => {
 };
 
 const normalizeMeetingIds = (payload) => {
-  const ids = Array.isArray(payload) ? payload : payload?.meetingIds;
+  const ids = Array.isArray(payload)
+    ? payload
+    : payload?.meetingIds;
 
   if (!Array.isArray(ids)) return [];
 
@@ -85,7 +182,11 @@ const normalizeMeetingIds = (payload) => {
     .filter((id) => Number.isInteger(id) && id > 0);
 };
 
-const delete_meeting_service = async (db_query, user_id, payload) => {
+const delete_meeting_service = async (
+  db_query,
+  user_id,
+  payload,
+) => {
   const userId = cleanString(user_id);
   const ids = normalizeMeetingIds(payload);
 
@@ -93,7 +194,7 @@ const delete_meeting_service = async (db_query, user_id, payload) => {
     throw new Error("Authenticated user is required.");
   }
 
-  if (ids.length === 0) {
+  if (!ids.length) {
     return {
       success: false,
       error: true,
@@ -101,13 +202,14 @@ const delete_meeting_service = async (db_query, user_id, payload) => {
     };
   }
 
-  const query = `
-    DELETE FROM meeting_schedules
-    WHERE id IN (${ids.map(() => "?").join(", ")})
-    AND shedular_user_id = ?
-  `;
-
-  const result = await db_query(query, [...ids, userId]);
+  const result = await db_query(
+    `
+      DELETE FROM meeting_schedules
+      WHERE id IN (${ids.map(() => "?").join(", ")})
+      AND shedular_user_id = ?
+    `,
+    [...ids, userId],
+  );
 
   return {
     success: result.affectedRows > 0,

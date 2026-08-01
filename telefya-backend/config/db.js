@@ -116,6 +116,47 @@ CREATE TABLE IF NOT EXISTS meeting_attendance (
 );
 `;
 
+const createMeetingSpeakerStatusesTableQuery = `
+CREATE TABLE IF NOT EXISTS meeting_speaker_statuses (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  meeting_id BIGINT NOT NULL,
+  user_id VARCHAR(50) NOT NULL,
+  is_ready BOOLEAN NOT NULL DEFAULT FALSE,
+  notes TEXT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    ON UPDATE CURRENT_TIMESTAMP,
+
+  UNIQUE KEY uq_meeting_speaker_status (meeting_id, user_id),
+  INDEX idx_meeting_speaker_status_user (user_id),
+
+  CONSTRAINT fk_meeting_speaker_status_meeting
+    FOREIGN KEY (meeting_id)
+    REFERENCES meeting_schedules(id)
+    ON DELETE CASCADE
+);
+`;
+
+const createMeetingSpeakerMaterialsTableQuery = `
+CREATE TABLE IF NOT EXISTS meeting_speaker_materials (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  meeting_id BIGINT NOT NULL,
+  user_id VARCHAR(50) NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  file_url TEXT NULL,
+  file_name VARCHAR(255) NULL,
+  file_type VARCHAR(100) NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  INDEX idx_meeting_speaker_materials_meeting (meeting_id, user_id),
+
+  CONSTRAINT fk_meeting_speaker_materials_meeting
+    FOREIGN KEY (meeting_id)
+    REFERENCES meeting_schedules(id)
+    ON DELETE CASCADE
+);
+`;
+
 const createRefreshTableQuery = `
 CREATE TABLE IF NOT EXISTS refresh_tokens (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -370,6 +411,32 @@ CREATE TABLE IF NOT EXISTS video_recordings (
 );
 `;
 
+const createMeetingMembersTableQuery = `
+CREATE TABLE IF NOT EXISTS meeting_members (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  meeting_id BIGINT NOT NULL,
+  user_id VARCHAR(50) NOT NULL,
+  member_role ENUM('speaker', 'attendee') NOT NULL,
+  status ENUM('invited', 'accepted', 'declined', 'removed')
+    NOT NULL DEFAULT 'invited',
+  invited_by_user_id VARCHAR(50) NOT NULL,
+  invited_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  responded_at DATETIME NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    ON UPDATE CURRENT_TIMESTAMP,
+
+  UNIQUE KEY uq_meeting_member (meeting_id, user_id),
+  INDEX idx_meeting_members_user (user_id, status),
+  INDEX idx_meeting_members_meeting (meeting_id, member_role, status),
+
+  CONSTRAINT fk_meeting_members_meeting
+    FOREIGN KEY (meeting_id)
+    REFERENCES meeting_schedules(id)
+    ON DELETE CASCADE
+);
+`;
+
 const recordMeetingParticipants = `
 CREATE TABLE IF NOT EXISTS recording_participants (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -386,13 +453,24 @@ const createMeetingScheduelTableQuery = `
 CREATE TABLE IF NOT EXISTS meeting_schedules (
   id BIGINT AUTO_INCREMENT PRIMARY KEY,
   meeting_url VARCHAR(220) NOT NULL,
+  room_id VARCHAR(120) NOT NULL,
   des VARCHAR(220),
   shedular_user_id VARCHAR(50) NOT NULL,
   time_zone VARCHAR(100) NOT NULL,
+  scheduled_for DATETIME NOT NULL,
+  status ENUM('upcoming', 'live', 'ended', 'cancelled')
+    NOT NULL DEFAULT 'upcoming',
+  started_at DATETIME NULL,
+  ended_at DATETIME NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_schedular_id (shedular_user_id),
-  FOREIGN KEY (shedular_user_id) REFERENCES users(user_id) ON DELETE CASCADE
+  UNIQUE KEY uq_meeting_schedule_room_id (room_id),
+  INDEX idx_meeting_schedule_status (status),
+  INDEX idx_meeting_scheduled_for (scheduled_for),
+  FOREIGN KEY (shedular_user_id)
+    REFERENCES users(user_id)
+    ON DELETE CASCADE
 );
 `;
 
@@ -446,12 +524,162 @@ async function createUsersTable() {
   }
 }
 
+async function migrateMeetingSchedulesTable() {
+  const rows = await query(
+    `
+      SELECT COLUMN_NAME
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = ?
+      AND TABLE_NAME = 'meeting_schedules'
+    `,
+    [process.env.DB_NAME],
+  );
+
+  const columns = new Set(rows.map((row) => row.COLUMN_NAME));
+
+  if (!columns.has("scheduled_for")) {
+    await query(`
+      ALTER TABLE meeting_schedules
+      ADD COLUMN scheduled_for DATETIME NULL AFTER time_zone
+    `);
+
+    // Preserve existing records. New records will always use their real date.
+    await query(`
+      UPDATE meeting_schedules
+      SET scheduled_for = COALESCE(
+        STR_TO_DATE(
+          SUBSTRING_INDEX(time_zone, ' ', 1),
+          '%Y-%m-%dT%H:%i:%s.%fZ'
+        ),
+        created_at
+      )
+      WHERE scheduled_for IS NULL
+    `);
+
+    await query(`
+      ALTER TABLE meeting_schedules
+      MODIFY COLUMN scheduled_for DATETIME NOT NULL
+    `);
+  }
+
+  if (!columns.has("status")) {
+    await query(`
+      ALTER TABLE meeting_schedules
+      ADD COLUMN status ENUM('upcoming', 'live', 'ended', 'cancelled')
+      NOT NULL DEFAULT 'upcoming'
+      AFTER scheduled_for
+    `);
+  }
+
+  if (!columns.has("started_at")) {
+    await query(`
+      ALTER TABLE meeting_schedules
+      ADD COLUMN started_at DATETIME NULL AFTER status
+    `);
+  }
+
+  if (!columns.has("ended_at")) {
+    await query(`
+      ALTER TABLE meeting_schedules
+      ADD COLUMN ended_at DATETIME NULL AFTER started_at
+    `);
+  }
+
+  if (!columns.has("room_id")) {
+    await query(`
+    ALTER TABLE meeting_schedules
+    ADD COLUMN room_id VARCHAR(120) NULL AFTER meeting_url
+  `);
+
+    await query(`
+    UPDATE meeting_schedules
+    SET room_id = TRIM(
+      TRAILING '/' FROM SUBSTRING_INDEX(
+        SUBSTRING_INDEX(meeting_url, '?', 1),
+        '/',
+        -1
+      )
+    )
+    WHERE room_id IS NULL OR room_id = ''
+  `);
+
+    await query(`
+    ALTER TABLE meeting_schedules
+    MODIFY COLUMN room_id VARCHAR(120) NOT NULL
+  `);
+  }
+
+  const indexes = await query(
+    `
+      SELECT INDEX_NAME
+      FROM INFORMATION_SCHEMA.STATISTICS
+      WHERE TABLE_SCHEMA = ?
+      AND TABLE_NAME = 'meeting_schedules'
+    `,
+    [process.env.DB_NAME],
+  );
+
+  const indexNames = new Set(indexes.map((row) => row.INDEX_NAME));
+
+  if (!indexNames.has("idx_meeting_schedule_status")) {
+    await query(`
+      CREATE INDEX idx_meeting_schedule_status
+      ON meeting_schedules (status)
+    `);
+  }
+
+  if (!indexNames.has("idx_meeting_scheduled_for")) {
+    await query(`
+      CREATE INDEX idx_meeting_scheduled_for
+      ON meeting_schedules (scheduled_for)
+    `);
+  }
+
+  if (!indexNames.has("uq_meeting_schedule_room_id")) {
+    await query(`
+    CREATE UNIQUE INDEX uq_meeting_schedule_room_id
+    ON meeting_schedules (room_id)
+  `);
+  }
+
+  console.log("meeting_schedules migration completed successfully");
+}
+
 async function createSchedularTable() {
   try {
     await query(createMeetingScheduelTableQuery);
+    await migrateMeetingSchedulesTable();
+
     console.log("meeting_schedules table created successfully");
   } catch (error) {
     console.error("Error creating meeting_schedules table:", error);
+  }
+}
+
+async function createMeetingSpeakerStatusesTable() {
+  try {
+    await query(createMeetingSpeakerStatusesTableQuery);
+    console.log("meeting_speaker_statuses table created successfully");
+  } catch (error) {
+    console.error("Error creating meeting_speaker_statuses table:", error);
+  }
+}
+
+async function createMeetingSpeakerMaterialsTable() {
+  try {
+    await query(createMeetingSpeakerMaterialsTableQuery);
+    console.log("meeting_speaker_materials table created successfully");
+  } catch (error) {
+    console.error("Error creating meeting_speaker_materials table:", error);
+  }
+}
+
+async function createMeetingMembersTable() {
+  try {
+    await query(createMeetingMembersTableQuery);
+    console.log("meeting_members table created successfully");
+  } catch (error) {
+    console.error("Error creating meeting_members table:", error);
   }
 }
 
@@ -573,6 +801,9 @@ const creeateDBandTables = async () => {
     setTimeout(async () => {
       await createUsersTable();
       await createSchedularTable();
+      await createMeetingMembersTable();
+      await createMeetingSpeakerStatusesTable();
+      await createMeetingSpeakerMaterialsTable();
       await createRefreshTable();
       await createStudentsTable();
       await createOtpsTable();
