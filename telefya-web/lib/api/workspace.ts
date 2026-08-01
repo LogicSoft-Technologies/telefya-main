@@ -113,6 +113,27 @@ export type AttendeeCertificate = {
   created_at?: string;
 };
 
+export type AdminUser = {
+  user_id: string;
+  first_name?: string;
+  last_name?: string;
+  email: string;
+  role?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  is_verified?: boolean;
+  status?: "active" | "suspended" | "invited";
+  created_at?: string;
+};
+
+export function listAdminUsers() {
+  return apiRequest<ApiResponse<AdminUser[]>>(
+    "/user/admin/users",
+    { method: "GET" },
+  );
+}
+
 export function getBranding() {
   return apiRequest<ApiResponse<WorkspaceBranding>>(
     "/user/admin/branding",
