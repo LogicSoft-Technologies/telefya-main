@@ -11,12 +11,14 @@ import {
   RefreshCcw,
   Sparkles,
   Trash2,
+  UserPlus,
   Users,
   Video,
   XCircle,
   Zap,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+
 import {
   deleteMeetings,
   getMeetings,
@@ -28,6 +30,10 @@ import {
   type BillingSubscription,
   type BillingUsage,
 } from "@/lib/api/billing";
+import {
+  inviteMeetingMember,
+  type MeetingMemberRole,
+} from "@/lib/api/workspace";
 import { getSavedUser } from "@/lib/auth/session";
 import { getAccessToken } from "@/lib/auth/tokens";
 
@@ -43,6 +49,7 @@ function decodeStoredText(value?: string) {
 
   const textarea = document.createElement("textarea");
   textarea.innerHTML = value;
+
   return textarea.value;
 }
 
@@ -52,7 +59,9 @@ function getRoomPath(meetingUrl?: string) {
   try {
     return new URL(decodedUrl).pathname;
   } catch {
-    return decodedUrl.startsWith("/live") ? decodedUrl : "/live/test-room-1";
+    return decodedUrl.startsWith("/live")
+      ? decodedUrl
+      : "/live/test-room-1";
   }
 }
 
@@ -63,7 +72,10 @@ function getMeetingDateLabel(meeting: ScheduledMeeting) {
     return "Schedule unavailable";
   }
 
-  const isoValue = value.includes("T") ? value : value.replace(" ", "T");
+  const isoValue = value.includes("T")
+    ? value
+    : value.replace(" ", "T");
+
   const hasTimezone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(isoValue);
   const utcValue = hasTimezone ? isoValue : `${isoValue}Z`;
 
@@ -83,7 +95,11 @@ function formatBytes(bytes?: number) {
   const value = Number(bytes || 0);
 
   if (value < 1024) return `${value} B`;
-  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`;
+  }
+
   if (value < 1024 * 1024 * 1024) {
     return `${(value / 1024 / 1024).toFixed(1)} MB`;
   }
@@ -100,9 +116,22 @@ export default function ConferenceLobbyPage() {
   const [loading, setLoading] = useState(true);
   const [billingLoading, setBillingLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [deletingId, setDeletingId] = useState<number | string | null>(null);
-  const [copiedId, setCopiedId] = useState<number | string | null>(null);
+  const [deletingId, setDeletingId] = useState<number | string | null>(
+    null,
+  );
+  const [copiedId, setCopiedId] = useState<number | string | null>(
+    null,
+  );
   const [error, setError] = useState("");
+
+  const [inviteMeetingId, setInviteMeetingId] = useState<
+    number | string | null
+  >(null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] =
+    useState<MeetingMemberRole>("attendee");
+  const [inviting, setInviting] = useState(false);
+  const [inviteNotice, setInviteNotice] = useState("");
 
   const user = getSavedUser();
 
@@ -137,7 +166,11 @@ export default function ConferenceLobbyPage() {
       const data = await getMeetings();
       setMeetings(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to load meetings.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to load meetings.",
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -155,10 +188,11 @@ export default function ConferenceLobbyPage() {
         return;
       }
 
-      const [subscriptionResponse, usageResponse] = await Promise.all([
-        getCurrentSubscription(token),
-        getBillingUsage(token),
-      ]);
+      const [subscriptionResponse, usageResponse] =
+        await Promise.all([
+          getCurrentSubscription(token),
+          getBillingUsage(token),
+        ]);
 
       setSubscription(subscriptionResponse.data || null);
       setUsage(usageResponse.data || null);
@@ -184,25 +218,73 @@ export default function ConferenceLobbyPage() {
 
   async function handleDelete(meetingId: number | string) {
     setError("");
+    setInviteNotice("");
     setDeletingId(meetingId);
 
     try {
       await deleteMeetings([meetingId]);
+
       setMeetings((current) =>
         current.filter((meeting) => meeting.id !== meetingId),
       );
+
+      if (String(inviteMeetingId) === String(meetingId)) {
+        setInviteMeetingId(null);
+      }
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Unable to delete meeting.",
+        err instanceof Error
+          ? err.message
+          : "Unable to delete meeting.",
       );
     } finally {
       setDeletingId(null);
     }
   }
 
+  async function handleInvite(
+    event: React.FormEvent<HTMLFormElement>,
+    meeting: ScheduledMeeting,
+  ) {
+    event.preventDefault();
+
+    const email = inviteEmail.trim().toLowerCase();
+
+    if (!email) {
+      setError("Enter the email address of the person you want to invite.");
+      return;
+    }
+
+    setError("");
+    setInviteNotice("");
+    setInviting(true);
+
+    try {
+      await inviteMeetingMember(meeting.id, {
+        email,
+        member_role: inviteRole,
+      });
+
+      setInviteNotice(
+        `${email} was invited as a ${inviteRole}.`,
+      );
+      setInviteEmail("");
+      setInviteRole("attendee");
+      setInviteMeetingId(null);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to send meeting invitation.",
+      );
+    } finally {
+      setInviting(false);
+    }
+  }
+
   useEffect(() => {
-    loadMeetings();
-    loadBilling();
+    void loadMeetings();
+    void loadBilling();
   }, []);
 
   return (
@@ -214,26 +296,30 @@ export default function ConferenceLobbyPage() {
           <div className="flex flex-col justify-between">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full border border-border bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-navy-500 shadow-soft sm:px-4 sm:text-xs">
-                <Sparkles size={15} className="text-telefya-violet" />
+                <Sparkles
+                  size={15}
+                  className="text-telefya-violet"
+                />
                 Conference lobby
               </div>
 
               <h1 className="mt-5 max-w-3xl text-[clamp(2rem,9vw,2.25rem)] font-black leading-tight text-navy-900 lg:text-4xl">
                 Welcome back,{" "}
-                <span className="telefya-text-gradient">{firstName}</span>
+                <span className="telefya-text-gradient">
+                  {firstName}
+                </span>
               </h1>
 
               <p className="mt-3 max-w-2xl text-base leading-7 text-navy-500 sm:leading-8">
-                Start secure meetings, manage invites, and keep your workspace
-                inside your current Telefya plan.
+                Create and manage your secure meeting rooms.
               </p>
             </div>
 
             <div className="mt-6 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap">
               <button
                 onClick={() => {
-                  loadMeetings(true);
-                  loadBilling();
+                  void loadMeetings(true);
+                  void loadBilling();
                 }}
                 disabled={refreshing}
                 className="telefya-interactive telefya-press telefya-focus-ring inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-border bg-white px-3 text-sm font-black text-navy-900 shadow-soft hover:border-telefya-blue hover:text-telefya-blue disabled:cursor-not-allowed disabled:opacity-70 sm:px-5"
@@ -284,7 +370,7 @@ export default function ConferenceLobbyPage() {
                 ) : (
                   <p className="mt-1 text-sm font-bold leading-5 text-navy-500">
                     {limits
-                      ? `${limits.max_participants} participants • ${limits.max_meeting_minutes} min meetings`
+                      ? `${limits.max_participants} participants · ${limits.max_meeting_minutes} min meetings`
                       : "Plan limits loading"}
                   </p>
                 )}
@@ -306,14 +392,18 @@ export default function ConferenceLobbyPage() {
               <PlanMetric
                 label="Record"
                 value={limits?.recording_enabled ? "On" : "Off"}
-                tone={limits?.recording_enabled ? "green" : "muted"}
+                tone={
+                  limits?.recording_enabled ? "green" : "muted"
+                }
                 loading={billingLoading}
               />
+
               <PlanMetric
                 label="Used"
                 value={`${usage?.meeting_minutes_used || 0}m`}
                 loading={billingLoading}
               />
+
               <PlanMetric
                 label="Storage"
                 value={formatBytes(usage?.storage_bytes_used)}
@@ -347,6 +437,13 @@ export default function ConferenceLobbyPage() {
         </div>
       ) : null}
 
+      {inviteNotice ? (
+        <div className="telefya-in-fade-up flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">
+          <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
+          {inviteNotice}
+        </div>
+      ) : null}
+
       <section className="grid gap-3 sm:grid-cols-3 sm:gap-5">
         <div className="telefya-in-fade-up telefya-stagger-1">
           <SummaryCard
@@ -357,15 +454,19 @@ export default function ConferenceLobbyPage() {
             loading={loading}
           />
         </div>
+
         <div className="telefya-in-fade-up telefya-stagger-2">
           <SummaryCard
             icon={Video}
             label="Recording"
-            value={limits?.recording_enabled ? "Enabled" : "Plan gated"}
+            value={
+              limits?.recording_enabled ? "Enabled" : "Plan gated"
+            }
             tone="violet"
             loading={billingLoading}
           />
         </div>
+
         <div className="telefya-in-fade-up telefya-stagger-3">
           <SummaryCard
             icon={Users}
@@ -380,14 +481,19 @@ export default function ConferenceLobbyPage() {
       <section className="telefya-in-fade-up telefya-stagger-2 overflow-hidden rounded-xl border border-border bg-white shadow-soft">
         <div className="flex flex-col justify-between gap-4 border-b border-border bg-white px-4 py-5 sm:px-5 lg:flex-row lg:items-center">
           <div>
-            <h2 className="text-xl font-black text-navy-900">Upcoming meetings</h2>
+            <h2 className="text-xl font-black text-navy-900">
+              Upcoming meetings
+            </h2>
             <p className="mt-1 text-sm font-semibold leading-6 text-navy-500">
-              Start as host, copy invite links, or clean up old sessions.
+              Start rooms, invite speakers or attendees, and share links.
             </p>
           </div>
 
           <div className="inline-flex w-fit items-center gap-2 rounded-full bg-navy-50 px-4 py-2 text-xs font-black text-navy-500">
-            <CheckCircle2 size={15} className="text-telefya-green" />
+            <CheckCircle2
+              size={15}
+              className="text-telefya-green"
+            />
             Synced with server
           </div>
         </div>
@@ -396,7 +502,10 @@ export default function ConferenceLobbyPage() {
           {loading ? (
             <div className="grid gap-4">
               {[0, 1, 2].map((index) => (
-                <MeetingCardSkeleton key={index} delayIndex={index} />
+                <MeetingCardSkeleton
+                  key={index}
+                  delayIndex={index}
+                />
               ))}
             </div>
           ) : upcomingMeetings.length === 0 ? (
@@ -404,11 +513,15 @@ export default function ConferenceLobbyPage() {
               <div className="mx-auto grid h-14 w-14 place-items-center rounded-xl bg-white text-telefya-violet shadow-soft">
                 <Video size={24} />
               </div>
-              <p className="mt-4 font-black text-navy-900">No meetings yet</p>
-              <p className="mx-auto mt-2 max-w-md text-sm font-semibold leading-6 text-navy-500">
-                Create your first Telefya meeting and start testing camera, mic,
-                chat, recording, and participant controls.
+
+              <p className="mt-4 font-black text-navy-900">
+                No meetings yet
               </p>
+
+              <p className="mx-auto mt-2 max-w-md text-sm font-semibold leading-6 text-navy-500">
+                Create a meeting to start inviting speakers and attendees.
+              </p>
+
               <Link
                 href="/meetings/create"
                 className="telefya-interactive telefya-lift telefya-press mt-5 inline-flex h-12 items-center gap-2 rounded-xl bg-telefya-blue px-5 text-sm font-black text-white shadow-soft hover:bg-telefya-violet"
@@ -420,78 +533,198 @@ export default function ConferenceLobbyPage() {
           ) : (
             <div className="grid gap-4">
               {upcomingMeetings.map((meeting, index) => {
-                const decodedUrl = decodeStoredText(meeting.meeting_url);
+                const decodedUrl = decodeStoredText(
+                  meeting.meeting_url,
+                );
                 const roomPath = getRoomPath(meeting.meeting_url);
-                const meetingLabel = meeting.des || "Telefya meeting";
+                const meetingLabel =
+                  meeting.des || "Telefya meeting";
                 const isDeleting = deletingId === meeting.id;
                 const isCopied = copiedId === meeting.id;
-                const staggerClass = `telefya-stagger-${Math.min(index + 1, 8)}`;
+                const inviteOpen =
+                  String(inviteMeetingId) === String(meeting.id);
+
+                const staggerClass = `telefya-stagger-${Math.min(
+                  index + 1,
+                  8,
+                )}`;
 
                 return (
                   <article
                     key={meeting.id}
                     className={[
-                      "telefya-in-fade-up telefya-interactive telefya-lift group grid gap-4 rounded-xl border border-border bg-white p-4 shadow-soft hover:border-telefya-blue/40 xl:grid-cols-[1fr_auto] xl:items-center",
+                      "telefya-in-fade-up telefya-interactive telefya-lift group grid gap-4 rounded-xl border border-border bg-white p-4 shadow-soft hover:border-telefya-blue/40",
                       staggerClass,
                       isDeleting ? "opacity-40" : "",
                     ].join(" ")}
                   >
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-lg font-black text-navy-900">
-                          {meetingLabel}
-                        </h3>
-                        <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-telefya-blue">
-                          Room ready
-                        </span>
+                    <div className="grid gap-4 xl:grid-cols-[1fr_auto] xl:items-center">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-lg font-black text-navy-900">
+                            {meetingLabel}
+                          </h3>
+
+                          <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-telefya-blue">
+                            Room ready
+                          </span>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap gap-3 text-sm font-semibold text-navy-500">
+                          <span className="inline-flex items-center gap-2">
+                            <Clock3
+                              size={16}
+                              className="text-telefya-violet"
+                            />
+                            {getMeetingDateLabel(meeting)}
+                          </span>
+                        </div>
+
+                        <p className="mt-3 break-all rounded-lg bg-navy-50 px-3 py-2 text-xs font-bold leading-5 text-navy-400">
+                          {decodedUrl}
+                        </p>
                       </div>
 
-                      <div className="mt-3 flex flex-wrap gap-3 text-sm font-semibold text-navy-500">
-                        <span className="inline-flex items-center gap-2">
-                          <Clock3 size={16} className="text-telefya-violet" />
-                          {getMeetingDateLabel(meeting)}
-                        </span>
+                      <div className="grid grid-cols-2 gap-2 xl:flex xl:flex-wrap xl:justify-end">
+                        <Link
+                          href={roomPath}
+                          className="telefya-interactive telefya-press col-span-2 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-telefya-blue px-4 text-sm font-black text-white shadow-soft hover:bg-telefya-violet xl:col-auto"
+                        >
+                          <Video size={16} />
+                          Start room
+                        </Link>
+
+                        <button
+                          onClick={() => {
+                            setError("");
+                            setInviteNotice("");
+                            setInviteEmail("");
+                            setInviteRole("attendee");
+
+                            setInviteMeetingId((current) =>
+                              String(current) === String(meeting.id)
+                                ? null
+                                : meeting.id,
+                            );
+                          }}
+                          className="telefya-interactive telefya-press inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-border bg-white px-3 text-sm font-black text-navy-700 hover:border-telefya-violet hover:text-telefya-violet xl:px-4"
+                        >
+                          <UserPlus size={16} />
+                          Invite
+                        </button>
+
+                        <button
+                          onClick={() => void handleCopy(meeting)}
+                          className="telefya-interactive telefya-press inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-border bg-white px-3 text-sm font-black text-navy-700 hover:border-telefya-green hover:text-telefya-green xl:px-4"
+                        >
+                          {isCopied ? (
+                            <CheckCircle2 size={16} />
+                          ) : (
+                            <Copy size={16} />
+                          )}
+                          {isCopied ? "Copied" : "Copy link"}
+                        </button>
+
+                        <button
+                          onClick={() => void handleDelete(meeting.id)}
+                          disabled={isDeleting}
+                          className="telefya-interactive telefya-press col-span-2 inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-border bg-white px-3 text-sm font-black text-navy-700 hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-70 xl:col-auto xl:px-4"
+                        >
+                          {isDeleting ? (
+                            <Loader2
+                              size={16}
+                              className="animate-spin"
+                            />
+                          ) : (
+                            <Trash2 size={16} />
+                          )}
+                          Delete
+                        </button>
                       </div>
-
-                      <p className="mt-3 break-all rounded-lg bg-navy-50 px-3 py-2 text-xs font-bold leading-5 text-navy-400">
-                        {decodedUrl}
-                      </p>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 xl:flex xl:flex-wrap xl:justify-end">
-                      <Link
-                        href={roomPath}
-                        className="telefya-interactive telefya-press col-span-2 inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-telefya-blue px-4 text-sm font-black text-white shadow-soft hover:bg-telefya-violet xl:col-auto"
+                    {inviteOpen ? (
+                      <form
+                        onSubmit={(event) =>
+                          void handleInvite(event, meeting)
+                        }
+                        className="grid gap-3 rounded-xl border border-violet-100 bg-violet-50/60 p-3 sm:grid-cols-[1fr_150px_auto] sm:items-end"
                       >
-                        <Video size={16} />
-                        Start room
-                      </Link>
+                        <label className="grid gap-1.5">
+                          <span className="text-xs font-black uppercase tracking-[0.1em] text-navy-500">
+                            Invite by email
+                          </span>
 
-                      <button
-                        onClick={() => handleCopy(meeting)}
-                        className="telefya-interactive telefya-press inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-border bg-white px-3 text-sm font-black text-navy-700 hover:border-telefya-green hover:text-telefya-green xl:px-4"
-                      >
-                        {isCopied ? (
-                          <CheckCircle2 size={16} />
-                        ) : (
-                          <Copy size={16} />
-                        )}
-                        {isCopied ? "Copied" : "Copy link"}
-                      </button>
+                          <input
+                            value={inviteEmail}
+                            onChange={(event) =>
+                              setInviteEmail(event.target.value)
+                            }
+                            type="email"
+                            autoComplete="email"
+                            placeholder="name@example.com"
+                            required
+                            disabled={inviting}
+                            className="h-11 w-full rounded-xl border border-border bg-white px-3 text-sm font-semibold text-navy-900 outline-none transition placeholder:text-navy-400 focus:border-telefya-violet focus:ring-4 focus:ring-violet-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          />
+                        </label>
 
-                      <button
-                        onClick={() => handleDelete(meeting.id)}
-                        disabled={isDeleting}
-                        className="telefya-interactive telefya-press inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-border bg-white px-3 text-sm font-black text-navy-700 hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-70 xl:px-4"
-                      >
-                        {isDeleting ? (
-                          <Loader2 size={16} className="animate-spin" />
-                        ) : (
-                          <Trash2 size={16} />
-                        )}
-                        Delete
-                      </button>
-                    </div>
+                        <label className="grid gap-1.5">
+                          <span className="text-xs font-black uppercase tracking-[0.1em] text-navy-500">
+                            Access
+                          </span>
+
+                          <select
+                            value={inviteRole}
+                            onChange={(event) =>
+                              setInviteRole(
+                                event.target
+                                  .value as MeetingMemberRole,
+                              )
+                            }
+                            disabled={inviting}
+                            className="h-11 rounded-xl border border-border bg-white px-3 text-sm font-bold text-navy-900 outline-none transition focus:border-telefya-violet focus:ring-4 focus:ring-violet-100 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            <option value="attendee">
+                              Attendee
+                            </option>
+                            <option value="speaker">
+                              Speaker
+                            </option>
+                          </select>
+                        </label>
+
+                        <div className="flex gap-2">
+                          <button
+                            type="submit"
+                            disabled={inviting}
+                            className="telefya-interactive telefya-press inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-telefya-violet px-4 text-sm font-black text-white shadow-soft hover:bg-telefya-purple disabled:cursor-not-allowed disabled:opacity-70"
+                          >
+                            {inviting ? (
+                              <Loader2
+                                size={16}
+                                className="animate-spin"
+                              />
+                            ) : (
+                              <UserPlus size={16} />
+                            )}
+                            Send
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={inviting}
+                            onClick={() => {
+                              setInviteMeetingId(null);
+                              setInviteEmail("");
+                            }}
+                            className="telefya-interactive telefya-press inline-flex h-11 items-center justify-center rounded-xl border border-border bg-white px-4 text-sm font-black text-navy-700 hover:border-red-200 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-70"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
                   </article>
                 );
               })}
@@ -503,7 +736,11 @@ export default function ConferenceLobbyPage() {
   );
 }
 
-function MeetingCardSkeleton({ delayIndex }: { delayIndex: number }) {
+function MeetingCardSkeleton({
+  delayIndex,
+}: {
+  delayIndex: number;
+}) {
   return (
     <div
       className={`telefya-in-fade-up telefya-stagger-${delayIndex + 1} grid gap-4 rounded-xl border border-border bg-white p-4 xl:grid-cols-[1fr_auto] xl:items-center`}
@@ -513,6 +750,7 @@ function MeetingCardSkeleton({ delayIndex }: { delayIndex: number }) {
         <div className="telefya-skeleton mt-3 h-4 w-56" />
         <div className="telefya-skeleton mt-3 h-8 w-full" />
       </div>
+
       <div className="grid grid-cols-2 gap-2 xl:flex xl:justify-end">
         <div className="telefya-skeleton col-span-2 h-11 w-full xl:w-28" />
         <div className="telefya-skeleton h-11 w-full xl:w-28" />
@@ -544,6 +782,7 @@ function PlanMetric({
       <p className="truncate text-[10px] font-black uppercase tracking-[0.08em] text-navy-400 sm:text-xs sm:tracking-[0.12em]">
         {label}
       </p>
+
       {loading ? (
         <div className="telefya-skeleton mt-1.5 h-5 w-14 sm:mt-2" />
       ) : (
@@ -583,6 +822,7 @@ function SummaryCard({
       >
         <Icon size={21} />
       </div>
+
       {loading ? (
         <div className="telefya-skeleton mt-4 h-8 w-16 sm:mt-5" />
       ) : (
@@ -590,7 +830,10 @@ function SummaryCard({
           {value}
         </p>
       )}
-      <p className="mt-1 text-sm font-bold text-navy-500">{label}</p>
+
+      <p className="mt-1 text-sm font-bold text-navy-500">
+        {label}
+      </p>
     </article>
   );
 }
