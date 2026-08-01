@@ -146,7 +146,13 @@ function getNetworkName(user: AttendeeNetworkUser) {
 }
 
 function getNetworkLocation(user: AttendeeNetworkUser) {
-  return [user.city, user.state, user.country]
+  const value = user as AttendeeNetworkUser & {
+    city?: string;
+    state?: string;
+    country?: string;
+  };
+
+  return [value.city, value.state, value.country]
     .filter(Boolean)
     .join(", ");
 }

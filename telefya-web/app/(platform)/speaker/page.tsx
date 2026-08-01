@@ -105,7 +105,7 @@ function getMeetingDateLabel(meeting: SpeakerMeetingView) {
 function normalizeMeeting(
   meeting: AssignedMeeting,
 ): SpeakerMeetingView | null {
-  const value = meeting as AssignedMeeting & {
+  const value = meeting as unknown as Omit<AssignedMeeting, "status"> & {
     id?: string | number;
     meeting_id?: string | number;
     member_id?: string | number;
