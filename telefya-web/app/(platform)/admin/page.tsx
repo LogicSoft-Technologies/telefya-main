@@ -94,46 +94,65 @@ export default function AdminPage() {
     );
   }, [profile]);
 
-  async function loadAdminData() {
-    setPageLoading(true);
-    setPageError("");
-    setMessage("");
+async function loadAdminData() {
+  setPageLoading(true);
+  setPageError("");
+  setMessage("");
 
-    try {
-      const [
-        meetingsResponse,
-        membersResponse,
-        brandingResponse,
-        billingResponse,
-        summaryResponse,
-      ] = await Promise.all([
-        getMeetings(),
-        listAdminUsers(),
-        getBranding(),
-        getBillingOverview(),
-        getReportSummary(),
-      ]);
+  const [
+    meetingsResult,
+    membersResult,
+    brandingResult,
+    billingResult,
+    summaryResult,
+  ] = await Promise.allSettled([
+    getMeetings(),
+    listAdminUsers(),
+    getBranding(),
+    getBillingOverview(),
+    getReportSummary(),
+  ]);
 
-      setMeetings(meetingsResponse);
-      setMembers(membersResponse.data || []);
-
-      const nextBranding = brandingResponse.data || emptyBranding;
-      setBranding(nextBranding);
-      setBrandingDraft({
-        ...emptyBranding,
-        ...nextBranding,
-      });
-
-      setBilling(billingResponse.data || emptyBilling);
-      setSummary(summaryResponse.data || emptySummary);
-    } catch (err) {
-      setPageError(
-        err instanceof Error ? err.message : "Unable to load admin workspace."
-      );
-    } finally {
-      setPageLoading(false);
-    }
+  if (meetingsResult.status === "fulfilled") {
+    setMeetings(meetingsResult.value);
   }
+
+  if (membersResult.status === "fulfilled") {
+    setMembers(membersResult.value.data || []);
+  } else {
+    setMembers([]);
+  }
+
+  if (brandingResult.status === "fulfilled") {
+    const nextBranding = brandingResult.value.data || emptyBranding;
+    setBranding(nextBranding);
+    setBrandingDraft({ ...emptyBranding, ...nextBranding });
+  }
+
+  if (billingResult.status === "fulfilled") {
+    setBilling(billingResult.value.data || emptyBilling);
+  }
+
+  if (summaryResult.status === "fulfilled") {
+    setSummary(summaryResult.value.data || emptySummary);
+  }
+
+  const failed = [
+    meetingsResult,
+    membersResult,
+    brandingResult,
+    billingResult,
+    summaryResult,
+  ].filter((result) => result.status === "rejected");
+
+  if (failed.length) {
+    setPageError(
+      "Some workspace data is unavailable right now. The member directory endpoint may not be live yet.",
+    );
+  }
+
+  setPageLoading(false);
+}
 
   async function handleSaveBranding() {
     setSavingBranding(true);
